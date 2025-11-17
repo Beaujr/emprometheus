@@ -1,0 +1,29 @@
+version: '3'
+services:
+  emhass:
+    container_name: emhass
+    image: ghcr.io/davidusb-geek/emhass:v0.13.5
+    volumes:
+      - ./emhass_config/share:/share
+      - ./emhass_config/data:/data
+      - ./emhass_config/secrets_emhass.yaml:/app/secrets_emhass.yaml
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - "LOCAL_COST_FUN=profit" # Maximizes profit (exports - imports)
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+  promhass:
+    container_name: promhass
+    build:
+      context: .
+      args:
+        APP_NAME: emhass
+    command: ["--dir", "/data", "--server", "--tariff", "false"]
+    volumes:
+      - ./emhass_config/share:/share
+      - ./emhass_config/data:/data
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
