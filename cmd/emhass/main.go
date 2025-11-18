@@ -1,30 +1,36 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"flag"
 	"fmt"
 	p "github.com/beaujr/emprometheus/internal/prometheus"
 	s "github.com/beaujr/emprometheus/internal/server"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 )
 
 var (
-	dir      = flag.String("dir", "./emhass_config/data", "the directory to serve files from")
-	tariff   = flag.Bool("tariff", false, "generate tariff files")
-	process  = flag.Bool("process", false, "process emhasses")
-	server   = flag.Bool("server", false, "run data server")
-	promApi  = flag.String("prometheus", "http://192.168.1.112:9090", "http://promapi:port")
-	promUser = flag.String("prometheus.user", "", "http://promapi:port")
-	promPass = flag.String("prometheus.pass", "", "http://promapi:port")
+	dir            = flag.String("dir", "./emhass_config/data", "the directory to serve files from")
+	tariff         = flag.Bool("tariff", false, "generate tariff files")
+	process        = flag.Bool("process", false, "process emhasses")
+	server         = flag.Bool("server", false, "run data server")
+	promApi        = flag.String("prometheus", "http://192.168.1.112:9090", "http://promapi:port")
+	promUser       = flag.String("prometheus.user", "", "http://promapi:port")
+	promPass       = flag.String("prometheus.pass", "", "http://promapi:port")
+	octopusProduct = flag.String("octopus.product", "COSY-FIX-12M-25-09-24", "Octopus Product")
+	octopusTariff  = flag.String("octopus.tariff", "E-1R-COSY-FIX-12M-25-09-24-N", "Octopus Tariff")
 )
 
 type basicAuthTransport struct {
@@ -40,11 +46,13 @@ func (bat *basicAuthTransport) RoundTrip(req *http.Request) (*http.Response, err
 func main() {
 	flag.Parse()
 	if *tariff {
-		produceTariff()
+		generateOctopusTariff()
 	}
 	if *process {
 		output()
+		return
 	}
+
 	ctx := context.Background()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	if *server {
@@ -66,7 +74,7 @@ func main() {
 			panic(err.Error())
 		}
 
-		if err = s.NewServer(ctx, logger, produceTariff, p.New(v1.NewAPI(pclient))); err != nil {
+		if err = s.NewServer(ctx, logger, generateAndReview, p.New(v1.NewAPI(pclient))); err != nil {
 			panic(err.Error())
 		}
 		return
@@ -76,6 +84,7 @@ func main() {
 type Row struct {
 	Timestamp time.Time
 	PPV       float64
+	Load      float64
 	PBatt     float64
 	SOC       float64
 	Price     float64
@@ -86,14 +95,12 @@ func parseFloat(s string) float64 {
 	return v
 }
 
-func output() {
-	// --- CONFIGURABLE PARAMETERS ---
-	const chargePower = 2500.0       // W
-	const batteryCapacity = 10000.0  // Wh (10 kWh example; adjust!)
-	const targetSOC = 0.90           // desired SOC after charge
-	const cheapPriceThreshold = 0.20 // cheap energy threshold
+func generateAndReview() {
+	generateOctopusTariff()
+	output()
+}
 
-	// --- OPEN CSV ---
+func output() {
 	file, err := os.Open(filepath.Join(*dir, "opt_res_latest.csv"))
 	if err != nil {
 		panic(err)
@@ -106,7 +113,6 @@ func output() {
 		panic(err)
 	}
 
-	// skip header
 	var rows []Row
 	for i := 1; i < len(allRows); i++ {
 		r := allRows[i]
@@ -119,6 +125,7 @@ func output() {
 		rows = append(rows, Row{
 			Timestamp: t,
 			PPV:       parseFloat(r[1]),
+			Load:      parseFloat(r[2]),
 			PBatt:     parseFloat(r[6]),
 			SOC:       parseFloat(r[7]),
 			Price:     parseFloat(r[8]),
@@ -129,64 +136,92 @@ func output() {
 		fmt.Println("No rows parsed.")
 		return
 	}
-
-	// --- Current SOC ---
-	currentSOC := rows[0].SOC
-	socDelta := targetSOC - currentSOC
-	if socDelta <= 0 {
-		fmt.Printf("SOC already above target (%.2f). No grid charging needed.\n", currentSOC)
-		return
-	}
-
-	// --- Energy & Time Required ---
-	energyNeededWh := socDelta * batteryCapacity
-	hoursNeeded := energyNeededWh / chargePower
-
-	fmt.Printf("Current SOC: %.3f → Target: %.3f\n", currentSOC, targetSOC)
-	fmt.Printf("Energy needed: %.1f Wh\n", energyNeededWh)
-	fmt.Printf("Charging hours required: %.2f\n\n", hoursNeeded)
-
-	// --- Detect cheap windows ---
-	type Window struct {
-		Start time.Time
-		End   time.Time
-		Rows  []Row
-	}
-
-	var windows []Window
-	var curr Window
-
-	for _, r := range rows {
-		if r.Price < cheapPriceThreshold {
-			// inside cheap window
-			if curr.Start.IsZero() {
-				curr.Start = r.Timestamp
+	for idx, r := range rows {
+		if r.PBatt < 0 {
+			if r.PPV > r.Load {
+				// Load First: Work mode priority
+				// Battery first grid charge: Disabled
+				// Load first stop discharge: 10% (dont set min battery when PV will pay for load)
+				fmt.Println(fmt.Sprintf("%s PV Charge Battery: %f to %f", r.Timestamp, r.PBatt, r.SOC*100))
+				continue
 			}
-			curr.Rows = append(curr.Rows, r)
-			curr.End = r.Timestamp
-		} else {
-			// window finished
-			if len(curr.Rows) > 0 {
-				windows = append(windows, curr)
-			}
-			curr = Window{}
+			// Work mode priority: Battery First
+			// Battery first grid charge: Enabled
+			// Load first stop discharge: 100%
+			fmt.Println(fmt.Sprintf("%s Grid Charge Battery: %f to %f", r.Timestamp, r.PBatt, r.SOC*100))
+			continue
+		}
+		if idx > 0 && rows[idx-1].SOC > r.SOC {
+			fmt.Println(fmt.Sprintf("%s Use Battery: %f to %f", r.Timestamp, r.PBatt, r.SOC*100))
 		}
 	}
-	if len(curr.Rows) > 0 {
-		windows = append(windows, curr)
-	}
 
-	if len(windows) == 0 {
-		fmt.Println("No cheap windows found.")
+}
+
+type Results struct {
+	Count    int         `json:"count"`
+	Next     string      `json:"next"`
+	Previous interface{} `json:"previous"`
+	Results  []Result    `json:"results"`
+}
+type Result struct {
+	ValueExcVat   float64     `json:"value_exc_vat"`
+	ValueIncVat   float64     `json:"value_inc_vat"`
+	ValidFrom     time.Time   `json:"valid_from"`
+	ValidTo       time.Time   `json:"valid_to"`
+	PaymentMethod interface{} `json:"payment_method"`
+}
+
+func generateOctopusTariff() {
+	client := http.Client{Timeout: 180 * time.Second}
+	url := fmt.Sprintf("https://api.octopus.energy/v1/products/%s/electricity-tariffs/%s/standard-unit-rates/?page_size=100", *octopusProduct, *octopusTariff)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
 		return
 	}
+	res, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	out, err := io.ReadAll(res.Body)
+	if err != nil {
+		return
+	}
+	var r Results
+	err = json.Unmarshal(out, &r)
+	if err != nil {
+		return
+	}
+	slices.SortFunc(r.Results, func(a, b Result) int {
+		return cmp.Compare(a.ValidFrom.Unix(), b.ValidFrom.Unix())
+	})
+	fo, err := os.Create(filepath.Join(*dir, "data_load_cost_forecast.csv"))
+	if err != nil {
+		panic(err)
+	}
+	// close fo on exit and check for its returned error
+	defer func() {
+		if err := fo.Close(); err != nil {
+			panic(err)
+		}
+	}()
+	now := time.Now()
+	start := now.Truncate(time.Hour).Add(time.Hour)
 
-	fmt.Println("Detected cheap windows:")
-	for _, w := range windows {
-		fmt.Printf(" - %s → %s (%d hours)\n",
-			w.Start.Format(time.RFC3339),
-			w.End.Format(time.RFC3339),
-			len(w.Rows))
+	steps := 24
+	t := start
+
+	for i := 0; i < steps; i++ {
+		for _, row := range r.Results {
+			if (row.ValidFrom.Before(t) || row.ValidFrom.Equal(t)) && row.ValidTo.After(t) {
+				// Print CSV line
+				line := fmt.Sprintf("%s,%.4f\n", t.Local().Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat)
+				if _, err = fo.Write([]byte(line)); err != nil {
+					panic(err)
+				}
+			}
+		}
+		t = t.Add(time.Hour)
 	}
 }
 

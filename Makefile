@@ -22,5 +22,6 @@ docker:
     		--provenance false \
     		./
 
-compose:
+compose: releaser
+	docker compose -f docker-compose.yaml build
 	docker compose -f docker-compose.yaml up -d
