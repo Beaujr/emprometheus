@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	"log/slog"
 	"net/http"
@@ -199,13 +200,15 @@ func (s *server) Handle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	query := pieces[1]
-	start, _ := time.Parse(time.DateTime, strings.ReplaceAll(strings.ReplaceAll(period, "T", " "), "Z", ""))
+	cleanStart := strings.ReplaceAll(strings.ReplaceAll(period, "T", " "), "Z", "")
+	start, _ := time.Parse(time.DateTime, cleanStart[:19])
 	step := (time.Now().Unix() - start.Unix()) / 11000
-	if step < 1800 {
-		step = 1800
+	if step < 3600 {
+		step = 300
 	}
+	query := fmt.Sprintf("%s unless changes(%s[2m]) == 0", pieces[1], pieces[1])
 	values, err := s.r.GetRange(r.Context(), query, start, time.Now(), time.Second*time.Duration(step))
+	//values, err := s.r.GetRange(r.Context(), query, start, time.Now(), time.Hour)
 	if err != nil {
 		slog.Info("error", slog.String("error", err.Error()))
 		return
@@ -213,6 +216,7 @@ func (s *server) Handle(w http.ResponseWriter, r *http.Request) {
 	response := make([]Response, 0)
 	for _, item := range values {
 		for _, values := range item.Values {
+			times := values.Timestamp.Time()
 			response = append(response, Response{
 				EntityID: entity,
 				State:    values.Value.String(),
@@ -222,8 +226,8 @@ func (s *server) Handle(w http.ResponseWriter, r *http.Request) {
 					DeviceClass:       "power",
 					FriendlyName:      query,
 				},
-				LastChanged: values.Timestamp.Time().Format("2006-01-02T15:04:05+00:00"),
-				LastUpdated: values.Timestamp.Time().Format("2006-01-02T15:04:05+00:00"),
+				LastChanged: times.Format("2006-01-02T15:04:05+00:00"),
+				LastUpdated: times.Format("2006-01-02T15:04:05+00:00"),
 			})
 		}
 	}
