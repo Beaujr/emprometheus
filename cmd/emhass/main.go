@@ -188,10 +188,13 @@ func output() {
 			w.End.Format(time.RFC3339),
 			len(w.Rows))
 	}
-	// --- PICK LAST CHEAP WIND
 }
 
 func produceTariff() {
+	// lazy
+	if !*tariff {
+		return
+	}
 	// open output file
 	fo, err := os.Create(filepath.Join(*dir, "data_load_cost_forecast.csv"))
 	if err != nil {
