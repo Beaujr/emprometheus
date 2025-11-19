@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "promhass.fullname" . }}
+  labels:
+    {{- include "promhass.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.emhass_service.port }}
+      targetPort: emhasshttp
+      protocol: TCP
+      name: emhasshttp
+    - port: {{ .Values.promhass_service.port }}
+      targetPort: promhasshttp
+      protocol: TCP
+      name: promhasshttp
+  selector:
+    {{- include "promhass.selectorLabels" . | nindent 4 }}

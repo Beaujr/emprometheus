@@ -97,7 +97,6 @@ func parseFloat(s string) float64 {
 
 func generateAndReview() {
 	generateOctopusTariff()
-	output()
 }
 
 func output() {
@@ -142,17 +141,17 @@ func output() {
 				// Load First: Work mode priority
 				// Battery first grid charge: Disabled
 				// Load first stop discharge: 10% (dont set min battery when PV will pay for load)
-				fmt.Println(fmt.Sprintf("%s PV Charge Battery: %f to %f", r.Timestamp, r.PBatt, r.SOC*100))
+				fmt.Println(fmt.Sprintf("%s PV Charge Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100))
 				continue
 			}
 			// Work mode priority: Battery First
 			// Battery first grid charge: Enabled
 			// Load first stop discharge: 100%
-			fmt.Println(fmt.Sprintf("%s Grid Charge Battery: %f to %f", r.Timestamp, r.PBatt, r.SOC*100))
+			fmt.Println(fmt.Sprintf("%s Grid Charge Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100))
 			continue
 		}
 		if idx > 0 && rows[idx-1].SOC > r.SOC {
-			fmt.Println(fmt.Sprintf("%s Use Battery: %f to %f", r.Timestamp, r.PBatt, r.SOC*100))
+			fmt.Println(fmt.Sprintf("%s Use Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100))
 		}
 	}
 
@@ -215,7 +214,7 @@ func generateOctopusTariff() {
 		for _, row := range r.Results {
 			if (row.ValidFrom.Before(t) || row.ValidFrom.Equal(t)) && row.ValidTo.After(t) {
 				// Print CSV line
-				line := fmt.Sprintf("%s,%.4f\n", t.Local().Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat)
+				line := fmt.Sprintf("%s,%.4f\n", t.Local().Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
 				if _, err = fo.Write([]byte(line)); err != nil {
 					panic(err)
 				}
