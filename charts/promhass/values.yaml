@@ -1,0 +1,262 @@
+# Default values for promhass.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+promhass_image:
+  repository: emhass
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+emhass_image:
+  repository: ghcr.io/davidusb-geek/emhass
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "v0.13.5"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+emhass_service:
+  port: 5000
+promhass_service:
+  port: 8123
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: myresolver
+  hosts:
+    - host: emprometheus
+      paths:
+        - path: /
+          pathType: Prefix
+          port: 5000
+  tls:
+    - hosts:
+        - emprometheus
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+#livenessProbe:
+#  httpGet:
+#    path: /
+#    port: http
+#readinessProbe:
+#  httpGet:
+#    path: /
+#    port: http
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+volumes:
+  - name: emprometheus
+    configMap:
+      name: promhass
+  - name: data-tmp
+    emptyDir:
+      medium: Memory
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts:
+  - name: emprometheus
+    mountPath: /share/config.json
+    subPath: config.json
+  - name: emprometheus
+    mountPath: /secrets_emhass.yaml
+    subPath: secrets.yaml
+  - name: data-tmp
+    mountPath: /data
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+config: |-
+  {
+    "logging_level": "INFO",
+    "costfun": "cost",
+    "optimization_time_step": 60,
+    "historic_days_to_retrieve": 9,
+    "method_ts_round": "last",
+    "continual_publish": false,
+    "data_path": "default",
+    "set_total_pv_sell": false,
+    "lp_solver": "default",
+    "lp_solver_path": "empty",
+    "lp_solver_timeout": 45,
+    "num_threads": 0,
+    "set_nocharge_from_grid": false,
+    "set_nodischarge_to_grid": false,
+    "set_battery_dynamic": false,
+    "battery_dynamic_max": 0.9,
+    "battery_dynamic_min": -0.9,
+    "weight_battery_discharge": 0,
+    "weight_battery_charge": 0,
+    "sensor_power_photovoltaics": "sensor.pv_power",
+    "sensor_power_photovoltaics_forecast": "sensor.p_pv_forecast",
+    "sensor_power_load_no_var_loads": "sensor.load_power",
+    "sensor_replace_zero": [
+        "sensor.pv_power"
+    ],
+    "sensor_linear_interp": [
+        "sensor.power_photovoltaics",
+        "sensor.load_power"
+    ],
+    "load_negative": false,
+    "set_zero_min": true,
+    "number_of_deferrable_loads": 0,
+    "nominal_power_of_deferrable_loads": [
+        0
+    ],
+    "minimum_power_of_deferrable_loads": [
+        0
+    ],
+    "operating_hours_of_each_deferrable_load": [
+        4
+    ],
+    "weather_forecast_method": "open-meteo",
+    "open_meteo_cache_max_age": 30,
+    "load_forecast_method": "naive",
+    "delta_forecast_daily": 1,
+    "load_cost_forecast_method": "csv",
+    "start_timesteps_of_each_deferrable_load": [
+        0
+    ],
+    "end_timesteps_of_each_deferrable_load": [
+        0
+    ],
+    "load_peak_hour_periods": {
+        "period_hp_1": [
+            {
+                "start": "02:54"
+            },
+            {
+                "end": "15:24"
+            }
+        ],
+        "period_hp_2": [
+            {
+                "start": "17:24"
+            },
+            {
+                "end": "20:24"
+            }
+        ]
+    },
+    "treat_deferrable_load_as_semi_cont": [
+        true
+    ],
+    "set_deferrable_load_single_constant": [
+        false
+    ],
+    "set_deferrable_startup_penalty": [
+        0
+    ],
+    "load_peak_hours_cost": 0.1907,
+    "load_offpeak_hours_cost": 0.15,
+    "production_price_forecast_method": "constant",
+    "photovoltaic_production_sell_price": 0.15,
+    "maximum_power_from_grid": 9000,
+    "maximum_power_to_grid": 9000,
+    "set_use_pv": true,
+    "set_use_adjusted_pv": false,
+    "adjusted_pv_regression_model": "LassoRegression",
+    "adjusted_pv_solar_elevation_threshold": 10,
+    "pv_module_model": [
+        "CSUN_Eurasia_Energy_Systems_Industry_and_Trade_CSUN350_72M"
+    ],
+    "pv_inverter_model": [
+        "Shenzhen_Growatt_New_Energy_Co___Ltd___SPH_3000TL_BL_US__240V_"
+    ],
+    "surface_tilt": [
+        30
+    ],
+    "surface_azimuth": [
+        205
+    ],
+    "modules_per_string": [
+        16
+    ],
+    "strings_per_inverter": [
+        1
+    ],
+    "inverter_is_hybrid": false,
+    "inverter_ac_output_max": 5000,
+    "inverter_ac_input_max": 5000,
+    "inverter_efficiency_dc_ac": 1,
+    "inverter_efficiency_ac_dc": 1,
+    "compute_curtailment": false,
+    "set_use_battery": true,
+    "battery_discharge_power_max": 2500,
+    "battery_charge_power_max": 2500,
+    "battery_discharge_efficiency": 0.95,
+    "battery_charge_efficiency": 1,
+    "battery_nominal_energy_capacity": 5000,
+    "battery_minimum_state_of_charge": 0.1,
+    "battery_maximum_state_of_charge": 1,
+    "battery_target_state_of_charge": 0.6
+  }
+secrets: |-
+  hass_url: http://localhost:8123/
+  long_lived_token: token_not_needed
+  lat: 56.048
+  lon: -2.72
+  alt: 0
+  Latitude: 56.048
+  Longitude: -2.72
+  Altitude: 0
+  time_zone: Europe/London
+
