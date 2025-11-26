@@ -49,7 +49,7 @@ func main() {
 	ctx := context.Background()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	var rateFetcher provider.RateFetcher = func() error {
-		logger.Warn(fmt.Sprintf("rate fetcher is disabled, relying on %s already existing", provider.CSVFileName)
+		logger.Warn(fmt.Sprintf("rate fetcher is disabled, relying on %s already existing", provider.CSVFileName))
 		// dont modify any files and rely on external file creating data_load_cost_forecast.csv
 		return nil
 	}
