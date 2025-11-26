@@ -4,6 +4,9 @@
 
 replicaCount: 1
 
+promhass:
+  args: []
+
 promhass_image:
   repository: emhass
   pullPolicy: IfNotPresent

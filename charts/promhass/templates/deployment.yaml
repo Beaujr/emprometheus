@@ -13,10 +13,11 @@ spec:
       {{- include "promhass.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
+      {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
+        checksum/pod: "{{ printf "%s" (now | unixEpoch) }}"
       labels:
         {{- include "promhass.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
@@ -34,8 +35,9 @@ spec:
           imagePullPolicy: {{ .Values.promhass_image.pullPolicy }}
           args:
             - --server
-            - --tariff=false
-            - --dir=/data
+          {{- with .Values.promhass.args }}
+            {{ toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - name: promhasshttp
               containerPort: {{ .Values.promhass_service.port }}
