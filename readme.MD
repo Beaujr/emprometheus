@@ -27,5 +27,23 @@ var (
     octopusTariff  = flag.String("octopus.tariff", "E-1R-COSY-FIX-12M-25-09-24-N", "Octopus Tariff")
 )
 ```
+
+## Temporal
+workflow is work in progress but the existing logic is as below
+```mermaid
+flowchart TD
+
+A[Start emhassworkflow] --> B[Fetch tariff information from energy provider]
+
+B --> C{Is 24-hour ahead info available?}
+C -- No --> D[Exit early<br>Keep existing scheduled battery optimisation workflows] --> I[Wait 1 hour<br>Run again]
+C -- Yes --> E[Generate 24-hour ahead forecast from EMHASS]
+
+E --> F[Delete existing scheduled actions for battery optimisation]
+F --> G[Schedule new actions for next 24 hours based on new forecast]
+G --> I[Wait 1 hour<br>Run again]
+```
+
+When actions from forecast are [printed to stdout](https://github.com/Beaujr/emprometheus/blob/eeddf7334d76fc7b0e761d0e5a6a6bcc858ea726/internal/temporal/workflow.go#L38) at the moment. But will integrate with SolarAssistant soon.
 ### Notes
 Currently the tariff generated in the CSV is for Octopus using this is optional.
