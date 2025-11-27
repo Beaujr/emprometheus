@@ -7,14 +7,19 @@ import (
 	p "github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/provider/octopus"
+	"github.com/beaujr/emprometheus/internal/scheduler"
 	s "github.com/beaujr/emprometheus/internal/server"
+	"github.com/beaujr/emprometheus/internal/temporal"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	temporalsdk "go.temporal.io/sdk/client"
+	"golang.org/x/sync/errgroup"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -31,6 +36,7 @@ var (
 	useTemporal       = flag.Bool("temporal.enable", false, "use temporal")
 	temporalNamespace = flag.String("temporal.namespace", "beau", "temporal namespace")
 	temporalAddress   = flag.String("temporal.address", "temporal-frontend-headless.temporal.svc.cluster.local:7233", "temporal address")
+	temporalSchedule  = flag.String("temporal.schedule", "2 11,23 * * *", "temporal schedule")
 )
 
 type basicAuthTransport struct {
@@ -83,7 +89,9 @@ func main() {
 		if err != nil {
 			panic(err.Error())
 		}
+		querier := p.New(v1.NewAPI(pclient))
 		var c temporalsdk.Client
+		var sch scheduler.Scheduler = &scheduler.DebugScheduler{}
 		if *useTemporal {
 			// The client is a heavyweight object that should be created once per process.
 			temporalClient, err := temporalsdk.Dial(temporalsdk.Options{
@@ -95,11 +103,48 @@ func main() {
 			}
 			c = temporalClient
 			defer c.Close()
+			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, querier, *temporalSchedule)
+			if err != nil {
+				panic(err.Error())
+			}
+			sch = temporalScheduler
 		}
 
-		if err = s.NewServer(ctx, logger, rateFetcher, c, p.New(v1.NewAPI(pclient)), *dir); err != nil {
-			panic(err.Error())
+		srv := s.NewServer(ctx, logger, rateFetcher, querier, *dir, sch)
+		errGrp, ctx := errgroup.WithContext(ctx)
+		ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
+		defer stop()
+		errGrp.Go(func() error {
+			if err = sch.Start(ctx); err != nil {
+				return err
+			}
+			return nil
+		})
+		errGrp.Go(func() error {
+			if err = srv.ListenAndServe(); err != nil {
+				if err = srv.Shutdown(ctx); err != nil {
+					return err
+				}
+				if err = srv.Close(); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		// Goroutine to watch for signal
+		errGrp.Go(func() error {
+			<-ctx.Done() // signal received
+			fmt.Println("signal received, shutting down server...")
+
+			// Shutdown server with timeout
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			return srv.Shutdown(shutdownCtx) // makes errgroup return error
+		})
+
+		if err = errGrp.Wait(); err != nil {
+			panic(err)
 		}
-		return
 	}
 }
