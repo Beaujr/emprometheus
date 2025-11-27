@@ -3,12 +3,17 @@ package emhass
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
+	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
+	"github.com/prometheus/common/model"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
@@ -19,25 +24,30 @@ const (
 	TaskQueue  = "emhassforecastqueue"
 )
 
+var (
+	soc = flag.String("soc", "battery_soc", "the prometheus battery SOC metric")
+)
+
 type Forecaster struct {
 	logger *slog.Logger
 	tariff provider.RateFetcher
 	s      client.ScheduleClient
+	p      prometheus.Reporter
 }
 
-func New(logger *slog.Logger, s client.ScheduleClient, tariff provider.RateFetcher) *Forecaster {
-	return &Forecaster{logger: logger, tariff: tariff, s: s}
+func New(logger *slog.Logger, s client.ScheduleClient, tariff provider.RateFetcher, p prometheus.Reporter) *Forecaster {
+	return &Forecaster{logger: logger, tariff: tariff, s: s, p: p}
 }
 
 func (f *Forecaster) Workflow(ctx workflow.Context, emhassUrl, emprometheusUrl string) (string, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 1,
+			InitialInterval: time.Minute,
+			MaximumAttempts: 2,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
-
 	logger := workflow.GetLogger(ctx)
 	logger.Info("forecast workflow started", "url", emhassUrl)
 
@@ -69,8 +79,23 @@ func (f *Forecaster) ForecastActivity(ctx context.Context, emhassUrl string) (in
 	if err := f.tariff(); err != nil {
 		return 0, err
 	}
+	// get current soc
+	v, _, err := f.p.Query(context.Background(), *soc, time.Now())
+	if err != nil {
+		return 0, err
+	}
+	if len(v.(model.Vector)) == 0 {
+		return 0, err
+	}
+	value := v.(model.Vector)[0].Value.String()
+	batterySOC, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, err
+	}
 	client := http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/action/dayahead-optim", emhassUrl), nil)
+	payload := fmt.Sprintf("{\"soc_init\": %.2f}", batterySOC/100)
+	f.logger.Info("payload", slog.String("payload", payload))
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/action/naive-mpc-optim", emhassUrl), strings.NewReader(payload))
 	if err != nil {
 		return 0, err
 	}
