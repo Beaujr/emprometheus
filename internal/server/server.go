@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -8,8 +9,8 @@ import (
 	"fmt"
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
-	"github.com/beaujr/emprometheus/internal/temporal"
 	"github.com/beaujr/emprometheus/internal/temporal/emhass"
+	"github.com/beaujr/emprometheus/internal/temporal/inverter"
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
 	temporal2 "go.temporal.io/sdk/temporal"
@@ -18,10 +19,12 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
-	"sync"
+	"syscall"
 	"time"
 )
 
@@ -30,9 +33,9 @@ type server struct {
 	r      prometheus.Reporter
 	tariff provider.RateFetcher
 	c      client.Client
-	//w      worker.Worker
-	s   client.ScheduleClient
-	dir string
+	s      client.ScheduleClient
+	i      *inverter.Inverter
+	dir    string
 }
 
 func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, c client.Client, r prometheus.Reporter, dir string) error {
@@ -43,29 +46,38 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 		c:      c,
 		dir:    dir,
 	}
-	var errGrp errgroup.Group
+	errGrp, ctx := errgroup.WithContext(context.Background())
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
 	if s.c != nil {
 		s.s = c.ScheduleClient()
-		w := worker.New(c, temporal.TaskQueue, worker.Options{})
-		w.RegisterWorkflow(temporal.Workflow)
-		w.RegisterActivity(temporal.Activity)
+		s.i = inverter.New(logger.With(slog.String("pkg", "inverter")), s.s)
+		w := worker.New(c, inverter.TaskQueue, worker.Options{})
+		w.RegisterWorkflow(s.i.Workflow)
+		w.RegisterActivity(s.i.Activity)
+		interruptCh := worker.InterruptCh()
 		errGrp.Go(func() error {
-			if err := w.Run(worker.InterruptCh()); err != nil {
+			if err := w.Run(interruptCh); err != nil {
 				return err
 			}
 			return nil
 		})
 		e := worker.New(c, emhass.TaskQueue, worker.Options{})
-		f := emhass.New(s.logger.With(slog.String("pkg", "emhass")), tariffs)
+		f := emhass.New(s.logger.With(slog.String("pkg", "emhass")), s.s, tariffs)
 		e.RegisterWorkflow(f.Workflow)
 		e.RegisterActivity(f.BuildScheduleActivity)
 		e.RegisterActivity(f.ForecastActivity)
 		errGrp.Go(func() error {
-			if err := e.Run(worker.InterruptCh()); err != nil {
+			if err := e.Run(interruptCh); err != nil {
 				return err
 			}
 			return nil
 		})
+		go func() {
+			<-interruptCh // OS signal
+			w.Stop()
+			e.Stop()
+		}()
 		if err := s.initForecast(ctx, f); err != nil {
 			return err
 		}
@@ -90,7 +102,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			if err != nil {
 				return
 			}
-			if strings.HasPrefix(sle.ID, temporal.WorkflowId) {
+			if strings.HasPrefix(sle.ID, inverter.WorkflowId) {
 				if err = s.s.GetHandle(ctx, sle.ID).Delete(r.Context()); err != nil {
 					w.WriteHeader(http.StatusInternalServerError)
 					return
@@ -98,6 +110,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			}
 		}
 		if err = s.output(r.Context()); err != nil {
+			w.Write([]byte(err.Error()))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -107,7 +120,10 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 		s.logger.Info(r.URL.Path)
 	})
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
-		s.tariff()
+		if err := s.tariff(); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		resp := `{
     "allowlist_external_dirs": [
         "/media",
@@ -272,6 +288,17 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 		}
 		return nil
 	})
+	// Goroutine to watch for signal
+	errGrp.Go(func() error {
+		<-ctx.Done() // signal received
+		fmt.Println("signal received, shutting down server...")
+
+		// Shutdown server with timeout
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		return srv.Shutdown(shutdownCtx) // makes errgroup return error
+	})
 
 	return errGrp.Wait()
 }
@@ -289,6 +316,9 @@ func (s *server) initForecast(ctx context.Context, f *emhass.Forecaster) error {
 			Workflow:  f.Workflow,
 			TaskQueue: emhass.TaskQueue,
 			Args:      []interface{}{"http://promhass.temporal.svc.cluster.local:5000", "http://promhass.temporal.svc.cluster.local:8123"},
+			RetryPolicy: &temporal2.RetryPolicy{
+				MaximumAttempts: 1,
+			},
 		},
 	})
 	if err != nil {
@@ -304,9 +334,13 @@ func (s *server) initForecast(ctx context.Context, f *emhass.Forecaster) error {
 	return nil
 }
 
-func (s *server) Process(ctx context.Context, t time.Time, action string) error {
-	s.logger.Info("action", slog.String("schedule", action))
-	scheduleID := fmt.Sprintf("%s-%d", temporal.WorkflowId, t.Unix())
+func (s *server) Process(ctx context.Context, t time.Time, workmodepriority, batteryfirstgridcharge string, soc float64) error {
+	if s.c == nil {
+		// temporal not implemented
+		return nil
+	}
+	s.logger.Info(t.Format(time.RFC3339), slog.String("work mode", workmodepriority), slog.String("battery first gridcharge", batteryfirstgridcharge))
+	scheduleID := fmt.Sprintf("%s-%d", inverter.WorkflowId, t.Unix())
 	_, err := s.s.Create(ctx, client.ScheduleOptions{
 		ID: scheduleID,
 		Spec: client.ScheduleSpec{
@@ -343,18 +377,20 @@ func (s *server) Process(ctx context.Context, t time.Time, action string) error 
 			EndAt: t.Add(1 * time.Second),
 		},
 		Action: &client.ScheduleWorkflowAction{
-			ID:        fmt.Sprintf("%s-%s", temporal.WorkflowId, uuid.New()),
-			Workflow:  temporal.Workflow, // reference to your workflow function
-			TaskQueue: temporal.TaskQueue,
-			Args:      []interface{}{action}, // workflow arguments, if any
+			ID:        fmt.Sprintf("%s-%s", inverter.WorkflowId, uuid.New()),
+			Workflow:  s.i.Workflow, // reference to your workflow function
+			TaskQueue: inverter.TaskQueue,
+			Args:      []interface{}{scheduleID, workmodepriority, batteryfirstgridcharge, soc}, // workflow arguments, if any
+			Memo:      map[string]interface{}{"Work Mode Priority": workmodepriority, "Battery First Grid Charge": batteryfirstgridcharge, "SOC": soc},
 		},
+		Memo: map[string]interface{}{"Work Mode Priority": workmodepriority, "Battery First Grid Charge": batteryfirstgridcharge, "SOC": soc},
 	})
 	if err != nil {
 		if errors.Is(err, temporal2.ErrScheduleAlreadyRunning) {
 			if err = s.s.GetHandle(ctx, scheduleID).Delete(ctx); err != nil {
 				return err
 			}
-			return s.Process(ctx, t, action)
+			return s.Process(ctx, t, workmodepriority, batteryfirstgridcharge, soc)
 		}
 		return err
 	}
@@ -412,6 +448,12 @@ func (s *server) Handle(w http.ResponseWriter, r *http.Request) {
 	w.Write(out)
 }
 
+type Schedule struct {
+	workmode, chargeBatteryFromGrid string
+	soc                             float64
+	time                            time.Time
+}
+
 func (s *server) output(ctx context.Context) error {
 	file, err := os.Open(filepath.Join(s.dir, "opt_res_latest.csv"))
 	if err != nil {
@@ -424,7 +466,6 @@ func (s *server) output(ctx context.Context) error {
 	if err != nil {
 		panic(err)
 	}
-
 	var rows []Row
 	for i := 1; i < len(allRows); i++ {
 		r := allRows[i]
@@ -445,52 +486,115 @@ func (s *server) output(ctx context.Context) error {
 	}
 
 	if len(rows) == 0 {
-		fmt.Println("No rows parsed.")
+		s.logger.Info("No rows parsed.")
 		return nil
 	}
-	var wg sync.WaitGroup
+	minPrice := slices.MinFunc(rows, func(a, b Row) int {
+		return cmp.Compare(a.Price, b.Price)
+	})
+	var schedules []Schedule
+	now := time.Now()
 	for idx, r := range rows {
-		if r.PBatt < 0 {
-			if r.PPV > r.Load {
-				// Load First: Work mode priority
-				// Battery first grid charge: Disabled
-				// Load first stop discharge: 10% (dont set min battery when PV will pay for load)
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					action := fmt.Sprintf("%s PV Charge Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
-					if err = s.Process(ctx, r.Timestamp, action); err != nil {
-						s.logger.Warn("error", slog.String("error", err.Error()))
-					}
-				}()
-				continue
+		d := r.Timestamp.Sub(now)
+		// is if the next hour block from now?
+		if d < time.Hour && d > 0 {
+			workmodepriority := workModePriorityLoadFirst
+			batteryfirstgridcharge := batteryFirstGridChargeDisabled
+			// is it expected to be charged in the next hour?
+			switch {
+			case r.PPV > r.Load:
+				// solar will charge it, grid will be used
+				workmodepriority = workModePriorityLoadFirst
+				batteryfirstgridcharge = batteryFirstGridChargeDisabled
+			case r.SOC < rows[idx+1].SOC && minPrice.Price == r.Price, r.PBatt < 0:
+				// it needs charged
+				workmodepriority = workModePriorityBatteryFirst
+				batteryfirstgridcharge = batteryFirstGridChargeEnabled
 			}
-			// Work mode priority: Battery First
-			// Battery first grid charge: Enabled
-			// Load first stop discharge: 100%
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				action := fmt.Sprintf("%s Grid Charge Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
-				if err = s.Process(ctx, r.Timestamp, action); err != nil {
-					s.logger.Warn("error", slog.String("error", err.Error()))
-				}
-			}()
+			s.logger.Info(r.Timestamp.Format(time.RFC3339), slog.String("work mode", workmodepriority), slog.String("battery first gridcharge", batteryfirstgridcharge))
+			schedules = append(schedules, Schedule{
+				workmode:              workmodepriority,
+				chargeBatteryFromGrid: batteryfirstgridcharge,
+				soc:                   r.SOC,
+				time:                  r.Timestamp,
+			})
+			//if err = s.Process(ctx, r.Timestamp, workmodepriority, batteryfirstgridcharge, r.SOC); err != nil {
+			//	s.logger.Warn("error", slog.String("error", err.Error()))
+			//}
 			continue
 		}
-		if idx > 0 && rows[idx-1].SOC > r.SOC {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				action := fmt.Sprintf("%s Use Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
-				if err = s.Process(ctx, r.Timestamp, action); err != nil {
-					s.logger.Warn("error", slog.String("error", err.Error()))
-				}
-			}()
+		// there should always be a schedule in the array at this point, safe check to be sure
+		if len(schedules) == 0 {
+			return errors.New("schedule is missing next hours action")
+		}
+		var p *Row
+		if idx > 0 {
+			p = &rows[idx-1]
+		}
+		workmodepriority, batteryfirstgridcharge, err := s.getAction(p, r)
+		if err != nil {
+			return err
+		}
+		if workmodepriority == "" {
+			continue
+		}
+		prevSchedule := schedules[len(schedules)-1]
+		if prevSchedule.workmode == workmodepriority && prevSchedule.chargeBatteryFromGrid == batteryfirstgridcharge {
+			if prevSchedule.soc < r.SOC {
+				schedules[len(schedules)-1].soc = r.SOC
+			}
+			continue
+		}
+		schedules = append(schedules, Schedule{
+			workmode:              workmodepriority,
+			chargeBatteryFromGrid: batteryfirstgridcharge,
+			soc:                   r.SOC,
+			time:                  r.Timestamp,
+		})
+	}
+	for _, schedule := range schedules {
+		s.logger.Info(schedule.time.Format(time.RFC3339), slog.String("work mode", schedule.workmode), slog.String("battery first gridcharge", schedule.chargeBatteryFromGrid))
+		if err = s.Process(ctx, schedule.time, schedule.workmode, schedule.chargeBatteryFromGrid, schedule.soc); err != nil {
+			s.logger.Warn("error", slog.String("error", err.Error()))
 		}
 	}
-	wg.Wait()
 	return nil
+}
+
+const (
+	workModePriorityLoadFirst      = "Load first"
+	workModePriorityBatteryFirst   = "Battery first"
+	batteryFirstGridChargeEnabled  = "Enabled"
+	batteryFirstGridChargeDisabled = "Disabled"
+)
+
+func (s *server) getAction(p *Row, r Row) (string, string, error) {
+	if r.PBatt < 0 {
+		if r.PPV > r.Load {
+			// Load First: Work mode priority
+			// Battery first grid charge: Disabled
+			// Load first stop discharge: 10% (dont set min battery when PV will pay for load)
+			action := fmt.Sprintf("%s PV Charge Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
+			s.logger.Info(action)
+			return workModePriorityLoadFirst, batteryFirstGridChargeDisabled, nil
+		}
+		// Work mode priority: Battery First
+		// Battery first grid charge: Enabled
+		// Load first stop discharge: 100%
+
+		action := fmt.Sprintf("%s Grid Charge Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
+		s.logger.Info(action)
+		return workModePriorityBatteryFirst, batteryFirstGridChargeEnabled, nil
+	}
+
+	// its discharging as previous row was gt soc
+	// if its expected to have higher SOC or same SOC for an hour
+	if p != nil && (p.SOC > r.SOC) {
+		action := fmt.Sprintf("%s Use Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
+		s.logger.Info(action)
+		return workModePriorityLoadFirst, batteryFirstGridChargeDisabled, nil
+	}
+	return "", "", nil
 }
 
 type Row struct {

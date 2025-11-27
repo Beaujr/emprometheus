@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/beaujr/emprometheus/internal/provider"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"log/slog"
 	"net/http"
 	"time"
@@ -20,15 +22,19 @@ const (
 type Forecaster struct {
 	logger *slog.Logger
 	tariff provider.RateFetcher
+	s      client.ScheduleClient
 }
 
-func New(logger *slog.Logger, tariff provider.RateFetcher) *Forecaster {
-	return &Forecaster{logger: logger, tariff: tariff}
+func New(logger *slog.Logger, s client.ScheduleClient, tariff provider.RateFetcher) *Forecaster {
+	return &Forecaster{logger: logger, tariff: tariff, s: s}
 }
 
 func (f *Forecaster) Workflow(ctx workflow.Context, emhassUrl, emprometheusUrl string) (string, error) {
 	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Second,
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 1,
+		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
