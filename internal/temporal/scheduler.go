@@ -69,8 +69,8 @@ func (fs *Temporal) Start(ctx context.Context) error {
 
 func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, p prometheus.Reporter, cron string) (*Temporal, error) {
 	s := c.ScheduleClient()
-	f := emhass.New(logger.With(slog.String("pkg", "emhass")), s, tariffs, p)
-	i := inverter.New(logger, s)
+	f := emhass.New(s, tariffs, p)
+	i := inverter.New(s)
 	return &Temporal{
 		logger:  logger,
 		c:       c,

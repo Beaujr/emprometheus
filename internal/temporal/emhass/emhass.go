@@ -8,6 +8,7 @@ import (
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/prometheus/common/model"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"log/slog"
@@ -29,14 +30,13 @@ var (
 )
 
 type Forecaster struct {
-	logger *slog.Logger
 	tariff provider.RateFetcher
 	s      client.ScheduleClient
 	p      prometheus.Reporter
 }
 
-func New(logger *slog.Logger, s client.ScheduleClient, tariff provider.RateFetcher, p prometheus.Reporter) *Forecaster {
-	return &Forecaster{logger: logger, tariff: tariff, s: s, p: p}
+func New(s client.ScheduleClient, tariff provider.RateFetcher, p prometheus.Reporter) *Forecaster {
+	return &Forecaster{tariff: tariff, s: s, p: p}
 }
 
 func (f *Forecaster) Workflow(ctx workflow.Context, emhassUrl, emprometheusUrl string) (string, error) {
@@ -80,7 +80,7 @@ func (f *Forecaster) ForecastActivity(ctx context.Context, emhassUrl string) (in
 		return 0, err
 	}
 	// get current soc
-	v, _, err := f.p.Query(context.Background(), *soc, time.Now())
+	v, _, err := f.p.Query(ctx, *soc, time.Now())
 	if err != nil {
 		return 0, err
 	}
@@ -92,27 +92,28 @@ func (f *Forecaster) ForecastActivity(ctx context.Context, emhassUrl string) (in
 	if err != nil {
 		return 0, err
 	}
-	client := http.Client{Timeout: 30 * time.Second}
+	httpClient := http.Client{Timeout: 30 * time.Second}
 	payload := fmt.Sprintf("{\"soc_init\": %.2f}", batterySOC/100)
-	f.logger.Info("payload", slog.String("payload", payload))
+	logger := activity.GetLogger(ctx)
+	logger.Info("payload", slog.String("payload", payload))
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/action/naive-mpc-optim", emhassUrl), strings.NewReader(payload))
 	if err != nil {
 		return 0, err
 	}
 
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return 0, err
 	}
 	return resp.StatusCode, nil
 }
 func (f *Forecaster) BuildScheduleActivity(ctx context.Context, emprometheus string) (int, error) {
-	client := http.Client{Timeout: 30 * time.Second}
+	httpClient := http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/process", emprometheus), nil)
 	if err != nil {
 		return 0, err
 	}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return 0, err
 	}

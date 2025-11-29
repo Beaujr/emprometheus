@@ -93,10 +93,10 @@ func main() {
 		var c temporalsdk.Client
 		var sch scheduler.Scheduler = &scheduler.DebugScheduler{}
 		if *useTemporal {
-			// The client is a heavyweight object that should be created once per process.
 			temporalClient, err := temporalsdk.Dial(temporalsdk.Options{
 				HostPort:  *temporalAddress,
 				Namespace: *temporalNamespace,
+				Logger:    logger,
 			})
 			if err != nil {
 				log.Fatalln("Unable to create client", err)
