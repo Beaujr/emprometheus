@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
@@ -68,9 +69,9 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 }
 
 func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {
-	s.logger.Info(r.URL.Path)
 	period := r.PathValue("range")
-	s.logger.Info(period + r.URL.RawQuery)
+	rLogger := s.logger.With(slog.String("path", r.URL.Path+"?"+r.URL.RawQuery))
+	rLogger.Info("request started")
 	entity := r.URL.Query().Get("filter_entity_id")
 	pieces := strings.Split(entity, ".")
 	if len(pieces) != 2 {
@@ -87,8 +88,12 @@ func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {
 	values, err := s.r.GetRange(r.Context(), query, start, time.Now(), time.Second*time.Duration(step))
 	//values, err := s.r.GetRange(r.Context(), query, start, time.Now(), time.Hour)
 	if err != nil {
-		slog.Info("error", slog.String("error", err.Error()))
-		return
+		if !errors.Is(err, prometheus.ErrNoRows) {
+			rLogger.Warn("error", slog.String("error", err.Error()))
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
 	}
 	response := make([]Response, 0)
 	for _, item := range values {
@@ -110,11 +115,12 @@ func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := json.Marshal(response)
 	if err != nil {
-		slog.Info("error", slog.String("error", err.Error()))
+		rLogger.Info("error", slog.String("error", err.Error()))
 		return
 	}
 	//lazy add array brackets again
 	out = []byte("[" + string(out) + "]")
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(out)
+	return
 }
