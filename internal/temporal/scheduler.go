@@ -128,9 +128,9 @@ func (fs *Temporal) process(ctx context.Context, t time.Time, workmodepriority, 
 	scheduleID := fmt.Sprintf("%s-%d", inverter.WorkflowId, t.Unix())
 	action := &client.ScheduleWorkflowAction{
 		ID:        fmt.Sprintf("%s-%s", inverter.WorkflowId, uuid.New()),
-		Workflow:  fs.i.Workflow, // reference to your workflow function
+		Workflow:  fs.i.Workflow,
 		TaskQueue: inverter.TaskQueue,
-		Args:      []interface{}{scheduleID, workmodepriority, batteryfirstgridcharge, soc}, // workflow arguments, if any
+		Args:      []interface{}{scheduleID, workmodepriority, batteryfirstgridcharge, soc},
 		Memo:      map[string]interface{}{"Work Mode Priority": workmodepriority, "Battery First Grid Charge": batteryfirstgridcharge, "SOC": soc},
 	}
 	_, err := fs.s.Create(ctx, client.ScheduleOptions{
@@ -138,30 +138,29 @@ func (fs *Temporal) process(ctx context.Context, t time.Time, workmodepriority, 
 		Spec: client.ScheduleSpec{
 			Calendars: []client.ScheduleCalendarSpec{
 				{
-					// Each field uses []ScheduleRange
 					Year: []client.ScheduleRange{{
-						Start: int(t.Year()),
-						End:   int(t.Year()),
+						Start: t.Year(),
+						End:   t.Year(),
 					}},
 					Month: []client.ScheduleRange{{
 						Start: int(t.Month()),
 						End:   int(t.Month()),
 					}},
 					DayOfMonth: []client.ScheduleRange{{
-						Start: int(t.Day()),
-						End:   int(t.Day()),
+						Start: t.Day(),
+						End:   t.Day(),
 					}},
 					Hour: []client.ScheduleRange{{
-						Start: int(t.Hour()),
-						End:   int(t.Hour()),
+						Start: t.Hour(),
+						End:   t.Hour(),
 					}},
 					Minute: []client.ScheduleRange{{
-						Start: int(t.Minute()),
-						End:   int(t.Minute()),
+						Start: t.Minute(),
+						End:   t.Minute(),
 					}},
 					Second: []client.ScheduleRange{{
-						Start: int(t.Second()),
-						End:   int(t.Second()),
+						Start: t.Second(),
+						End:   t.Second(),
 					}},
 				},
 			},
