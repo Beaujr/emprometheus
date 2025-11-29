@@ -8,7 +8,6 @@ import (
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
-	"github.com/beaujr/emprometheus/internal/temporal/inverter"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -19,7 +18,6 @@ type Server struct {
 	logger    *slog.Logger
 	r         prometheus.Reporter
 	tariff    provider.RateFetcher
-	i         *inverter.Inverter
 	dir       string
 	scheduler scheduler.Scheduler
 }
@@ -79,14 +77,18 @@ func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cleanStart := strings.ReplaceAll(strings.ReplaceAll(period, "T", " "), "Z", "")
-	start, _ := time.Parse(time.DateTime, cleanStart[:19])
+	start, err := time.Parse(time.DateTime, cleanStart[:19])
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
 	step := (time.Now().Unix() - start.Unix()) / 11000
 	if step < 3600 {
 		step = 300
 	}
 	query := fmt.Sprintf("%s unless changes(%s[2m]) == 0", pieces[1], pieces[1])
 	values, err := s.r.GetRange(r.Context(), query, start, time.Now(), time.Second*time.Duration(step))
-	//values, err := s.r.GetRange(r.Context(), query, start, time.Now(), time.Hour)
 	if err != nil {
 		if !errors.Is(err, prometheus.ErrNoRows) {
 			rLogger.Warn("error", slog.String("error", err.Error()))
@@ -97,11 +99,11 @@ func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 	response := make([]Response, 0)
 	for _, item := range values {
-		for _, values := range item.Values {
-			times := values.Timestamp.Time()
+		for _, i := range item.Values {
+			times := i.Timestamp.Time()
 			response = append(response, Response{
 				EntityID: entity,
-				State:    values.Value.String(),
+				State:    i.Value.String(),
 				Attributes: Attributes{
 					StateClass:        "measurement",
 					UnitOfMeasurement: "W",
@@ -118,7 +120,6 @@ func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {
 		rLogger.Info("error", slog.String("error", err.Error()))
 		return
 	}
-	//lazy add array brackets again
 	out = []byte("[" + string(out) + "]")
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(out)
