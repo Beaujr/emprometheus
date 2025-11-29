@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
@@ -12,6 +13,8 @@ type Reporter interface {
 	GetRange(ctx context.Context, query string, start, end time.Time, step time.Duration) (model.Matrix, error)
 	Query(ctx context.Context, query string, ts time.Time, opts ...v1.Option) (model.Value, v1.Warnings, error)
 }
+
+var ErrNoRows = errors.New("no rows in result set")
 
 func New(api v1.API) *reporter {
 	return &reporter{api: api}
@@ -43,7 +46,7 @@ func (r *reporter) GetRange(ctx context.Context, query string, start, end time.T
 	}
 	if m, ok := grid.(model.Matrix); ok {
 		if m.Len() == 0 {
-			return nil, fmt.Errorf("no series returned")
+			return nil, ErrNoRows
 		}
 		return m, nil
 	}
