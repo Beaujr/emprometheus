@@ -33,30 +33,73 @@ type Temporal struct {
 	tariffs provider.RateFetcher
 	prom    prometheus.Reporter
 	cron    string
+	mpc     bool
+}
+
+type workers struct {
+	queue      string
+	workflow   interface{}
+	activities []interface{}
 }
 
 func (fs *Temporal) Start(ctx context.Context) error {
+	ws := []workers{
+		{
+			queue:      inverter.TaskQueue,
+			workflow:   fs.i.Workflow,
+			activities: []interface{}{fs.i.Activity},
+		}, {
+			queue:      emhass.TaskQueueMPC,
+			workflow:   fs.f.MPCWorkflow,
+			activities: []interface{}{fs.f.BuildScheduleActivity, fs.f.MPCActivity},
+		}, {
+			queue:      emhass.TaskQueue,
+			workflow:   fs.f.ForecastWorkflow,
+			activities: []interface{}{fs.f.ForecastActivity, fs.f.BuildScheduleActivity},
+		},
+	}
 	errGrp, ctx := errgroup.WithContext(ctx)
-	w := worker.New(fs.c, inverter.TaskQueue, worker.Options{})
-	w.RegisterWorkflow(fs.i.Workflow)
-	w.RegisterActivity(fs.i.Activity)
+	//// Workflows for interacting with inverter
+	//w := worker.New(fs.c, inverter.TaskQueue, worker.Options{})
+	//w.RegisterWorkflow(fs.i.Workflow)
+	//w.RegisterActivity(fs.i.Activity)
 	interruptCh := worker.InterruptCh()
-	errGrp.Go(func() error {
-		if err := w.Run(interruptCh); err != nil {
-			return err
+	//errGrp.Go(func() error {
+	//	if err := w.Run(interruptCh); err != nil {
+	//		return err
+	//	}
+	//	return nil
+	//})
+	//
+	//// workflows for MPC
+	//e := worker.New(fs.c, emhass.TaskQueueMPC, worker.Options{})
+	//e.RegisterWorkflow(fs.f.MPCWorkflow)
+	//e.RegisterActivity(fs.f.BuildScheduleActivity)
+	//e.RegisterActivity(fs.f.MPCActivity)
+	//// workflows for 24 forecast
+	//e := worker.New(fs.c, emhass.TaskQueue, worker.Options{})
+	//e.RegisterWorkflow(fs.f.ForecastWorkflow)
+	//e.RegisterActivity(fs.f.ForecastActivity)
+	//errGrp.Go(func() error {
+	//	if err := e.Run(interruptCh); err != nil {
+	//		return err
+	//	}
+	//	return nil
+	//})
+	for _, w := range ws {
+		e := worker.New(fs.c, w.queue, worker.Options{})
+		e.RegisterWorkflow(w.workflow)
+		for _, a := range w.activities {
+			e.RegisterActivity(a)
 		}
-		return nil
-	})
-	e := worker.New(fs.c, emhass.TaskQueue, worker.Options{})
-	e.RegisterWorkflow(fs.f.Workflow)
-	e.RegisterActivity(fs.f.BuildScheduleActivity)
-	e.RegisterActivity(fs.f.ForecastActivity)
-	errGrp.Go(func() error {
-		if err := e.Run(interruptCh); err != nil {
-			return err
-		}
-		return nil
-	})
+		errGrp.Go(func() error {
+			if err := e.Run(interruptCh); err != nil {
+				return err
+			}
+			return nil
+		})
+
+	}
 	errGrp.Go(func() error {
 		if err := fs.InitForecastSchedule(ctx); err != nil {
 			return err
@@ -67,7 +110,7 @@ func (fs *Temporal) Start(ctx context.Context) error {
 
 }
 
-func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, p prometheus.Reporter, cron string) (*Temporal, error) {
+func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, p prometheus.Reporter, cron string, mpc bool) (*Temporal, error) {
 	s := c.ScheduleClient()
 	f := emhass.New(s, tariffs, p)
 	i := inverter.New(s)
@@ -79,16 +122,53 @@ func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs prov
 		i:       i,
 		cron:    cron,
 		tariffs: tariffs,
+		mpc:     mpc,
 	}, nil
 }
 
 func (fs *Temporal) InitForecastSchedule(ctx context.Context) error {
+	switch {
+	case fs.mpc:
+		if err := fs.setUpMPCWorkflows(ctx); err != nil {
+			return err
+		}
+	default:
+		//delete any existing mpc workflows
+		existing, err := fs.s.List(ctx, client.ScheduleListOptions{})
+		if err != nil {
+			return err
+		}
+		for {
+			if !existing.HasNext() {
+				break
+			}
+			next, err := existing.Next()
+			if err != nil {
+				fs.logger.Warn(err.Error())
+				break
+			}
+			if strings.HasPrefix(next.ID, emhass.WorkflowIdMPC) {
+				if err = fs.s.GetHandle(ctx, next.ID).Delete(ctx); err != nil {
+					fs.logger.Warn(err.Error())
+					continue
+				}
+			}
+		}
+	}
+
+	if err := fs.setUpForecastWorkflows(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (fs *Temporal) setUpMPCWorkflows(ctx context.Context) error {
 	fs.logger.Info("forecast")
-	scheduleID := emhass.WorkflowId
+	scheduleID := emhass.WorkflowIdMPC
 	action := &client.ScheduleWorkflowAction{
 		ID:        scheduleID,
-		Workflow:  fs.f.Workflow,
-		TaskQueue: emhass.TaskQueue,
+		Workflow:  fs.f.MPCWorkflow,
+		TaskQueue: emhass.TaskQueueMPC,
 		Args:      []interface{}{"http://localhost:5000", "http://localhost:8123"},
 		RetryPolicy: &temporal2.RetryPolicy{
 			MaximumAttempts: 1,
@@ -123,6 +203,48 @@ func (fs *Temporal) InitForecastSchedule(ctx context.Context) error {
 	return nil
 }
 
+func (fs *Temporal) setUpForecastWorkflows(ctx context.Context) error {
+	fs.logger.Info("forecast")
+	scheduleID := emhass.WorkflowId
+	schedule := "59 0 * * *"
+	action := &client.ScheduleWorkflowAction{
+		ID:        scheduleID,
+		Workflow:  fs.f.ForecastWorkflow,
+		TaskQueue: emhass.TaskQueue,
+		Args:      []interface{}{"http://localhost:5000", "http://localhost:8123"},
+		RetryPolicy: &temporal2.RetryPolicy{
+			MaximumAttempts: 1,
+		},
+	}
+	sch, err := fs.s.Create(ctx, client.ScheduleOptions{
+		ID: scheduleID,
+		Spec: client.ScheduleSpec{
+			CronExpressions: []string{schedule},
+		},
+		Action: action,
+	})
+	if err != nil {
+		if !errors.Is(err, temporal2.ErrScheduleAlreadyRunning) {
+			return err
+		}
+		fs.logger.Warn("updating workflow schedule", slog.String("scheduleID", scheduleID))
+		sch = fs.s.GetHandle(ctx, scheduleID)
+		err = sch.Update(ctx, client.ScheduleUpdateOptions{DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+			input.Description.Schedule.Spec = &client.ScheduleSpec{
+				CronExpressions: []string{schedule},
+			}
+			input.Description.Schedule.Action = action
+			return &client.ScheduleUpdate{
+				Schedule: &input.Description.Schedule,
+			}, nil
+		}})
+		if err != nil {
+			return err
+		}
+	}
+	// trigger on init
+	return sch.Trigger(ctx, client.ScheduleTriggerOptions{})
+}
 func (fs *Temporal) process(ctx context.Context, t time.Time, workmodepriority, batteryfirstgridcharge string, soc float64) error {
 	fs.logger.Info(t.Format(time.RFC3339), slog.String("work mode", workmodepriority), slog.String("battery first gridcharge", batteryfirstgridcharge))
 	scheduleID := fmt.Sprintf("%s-%d", inverter.WorkflowId, t.Unix())

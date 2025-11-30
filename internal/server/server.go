@@ -8,6 +8,7 @@ import (
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
+	"github.com/prometheus/common/model"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -22,7 +23,7 @@ type Server struct {
 	scheduler scheduler.Scheduler
 }
 
-func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir string, scheduler scheduler.Scheduler) *http.Server {
+func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir string, scheduler scheduler.Scheduler, mpc bool) *http.Server {
 	s := &Server{
 		logger:    logger,
 		r:         r,
@@ -88,7 +89,7 @@ func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {
 		step = 300
 	}
 	query := fmt.Sprintf("%s unless changes(%s[2m]) == 0", pieces[1], pieces[1])
-	values, err := s.r.GetRange(r.Context(), query, start, time.Now(), time.Second*time.Duration(step))
+	values, err := getRange(r.Context(), s.r, query, start, time.Now(), step)
 	if err != nil {
 		if !errors.Is(err, prometheus.ErrNoRows) {
 			rLogger.Warn("error", slog.String("error", err.Error()))
@@ -96,6 +97,7 @@ func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(err.Error()))
 			return
 		}
+
 	}
 	response := make([]Response, 0)
 	for _, item := range values {
@@ -124,4 +126,17 @@ func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(out)
 	return
+}
+
+// getRange is a wrapper to handle ErrNoRows scenario and push the start back by 1 day
+func getRange(ctx context.Context, r prometheus.Reporter, query string, start time.Time, end time.Time, step int64) (model.Matrix, error) {
+	values, err := r.GetRange(ctx, query, start, end, time.Second*time.Duration(step))
+	if err != nil {
+		if errors.Is(err, prometheus.ErrNoRows) {
+			// its empty due to no results, lets set the start to the previous day values as a backup
+			return r.GetRange(ctx, query, start.Add(-24*time.Hour), end, time.Second*time.Duration(step))
+		}
+		return nil, err
+	}
+	return values, nil
 }
