@@ -37,6 +37,8 @@ var (
 	temporalNamespace = flag.String("temporal.namespace", "beau", "temporal namespace")
 	temporalAddress   = flag.String("temporal.address", "temporal-frontend-headless.temporal.svc.cluster.local:7233", "temporal address")
 	temporalSchedule  = flag.String("temporal.schedule", "2 11,23 * * *", "temporal schedule")
+	temporalTLS       = flag.Bool("temporal.tls", false, "TLS connection for temporal client")
+	mpc               = flag.Bool("mpc", false, "use mpc or just rely on forecast")
 )
 
 type basicAuthTransport struct {
@@ -93,24 +95,20 @@ func main() {
 		var c temporalsdk.Client
 		var sch scheduler.Scheduler = &scheduler.DebugScheduler{}
 		if *useTemporal {
-			temporalClient, err := temporalsdk.Dial(temporalsdk.Options{
-				HostPort:  *temporalAddress,
-				Namespace: *temporalNamespace,
-				Logger:    logger,
-			})
+			temporalClient, err := temporal.NewClient(logger.With(slog.String("pkg", "temporal")), *temporalAddress, *temporalNamespace, *temporalTLS)
 			if err != nil {
 				log.Fatalln("Unable to create client", err)
 			}
 			c = temporalClient
 			defer c.Close()
-			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, querier, *temporalSchedule)
+			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, querier, *temporalSchedule, *mpc)
 			if err != nil {
 				panic(err.Error())
 			}
 			sch = temporalScheduler
 		}
 
-		srv := s.NewServer(ctx, logger, rateFetcher, querier, *dir, sch)
+		srv := s.NewServer(ctx, logger, rateFetcher, querier, *dir, sch, *mpc)
 		errGrp, ctx := errgroup.WithContext(ctx)
 		ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 		defer stop()

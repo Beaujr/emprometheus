@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	WorkflowId = "emhassworkflow"
-	TaskQueue  = "emhassqueue"
+	WorkflowId = "inverterworkflow"
+	TaskQueue  = "inverterqueue"
 )
 
 type Inverter struct {

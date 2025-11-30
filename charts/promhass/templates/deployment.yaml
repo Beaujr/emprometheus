@@ -19,6 +19,7 @@ spec:
       {{- end }}
         checksum/pod: "{{ printf "%s" (now | unixEpoch) }}"
       labels:
+        app: promhass
         {{- include "promhass.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
