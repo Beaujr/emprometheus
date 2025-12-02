@@ -223,3 +223,7 @@ func (sa *SolarAssistant) deviceModeHandler(client mqtt.Client, msg mqtt.Message
 func (sa *SolarAssistant) gridFirstBatteryChargerHandler(client mqtt.Client, msg mqtt.Message) {
 	sa.stateHandler.SetBatteryFirstGridCharge(string(msg.Payload()))
 }
+
+func (sa *SolarAssistant) GetSOC() (int64, error) {
+	return sa.stateHandler.GetSOC(), nil // remove error later? or keep for compatibility?
+}

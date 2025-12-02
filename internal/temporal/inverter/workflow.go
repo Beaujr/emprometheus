@@ -76,14 +76,20 @@ func (i *Inverter) Activity(ctx context.Context, workmodepriority, batteryfirstg
 	}
 
 	switch workmodepriority {
-
 	case scheduler.WorkModeBatteryFirst:
-		if err := i.pp.SetLoadFirstStopDischarge(int64(soc) * 100); err != nil {
+		currenctSoc, err := i.pp.GetSOC()
+		if err != nil {
+			return "", err
+		}
+		if currenctSoc > int64(soc) {
+			soc = float64(currenctSoc)
+		}
+		if err = i.pp.SetLoadFirstStopDischarge(int64(soc)); err != nil {
 			return "", err
 		}
 	default:
 		// always allow discharging to 10 (minimum) unless explicitly grid charging
-		if err := i.pp.SetLoadFirstStopDischarge(10); err != nil {
+		if err := i.pp.SetLoadFirstStopDischarge(int64(soc)); err != nil {
 			return "", err
 		}
 	}

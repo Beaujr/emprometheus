@@ -21,6 +21,7 @@ type ControllablePowerPlant interface {
 	SetBatteryFirstGridCharge(enabled string) error
 	SetWorkModePriority(workmode string) error
 	SetLoadFirstStopDischarge(soc int64) error
+	GetSOC() (int64, error)
 	Start(ctx context.Context) error
 }
 type DebugScheduler struct{}
