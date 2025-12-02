@@ -405,20 +405,14 @@ func (fs *Temporal) getCommands(rows []Row) []Schedule {
 		return cmp.Compare(a.Price, b.Price)
 	})
 	var commands []Schedule
-
 	for _, row := range rows {
-		var loadPriority string
-		var gridCharge string
-		var soc float64
-
+		loadPriority := scheduler.WorkModeLoadFirst
+		gridCharge := scheduler.BatteryFirstGridChargeDisabled
+		soc := float64(10)
 		if row.PBatt < 0 || row.Price == minGridPrice.Price {
 			loadPriority = scheduler.WorkModeBatteryFirst
 			gridCharge = scheduler.BatteryFirstGridChargeEnabled
 			soc = row.SOC * 100
-		} else {
-			loadPriority = scheduler.WorkModeLoadFirst
-			gridCharge = scheduler.BatteryFirstGridChargeDisabled
-			soc = 10
 		}
 
 		commands = append(commands, Schedule{
@@ -428,9 +422,7 @@ func (fs *Temporal) getCommands(rows []Row) []Schedule {
 			chargeBatteryFromGrid: gridCharge,
 		})
 	}
-
 	return commands
-
 }
 
 type Row struct {
