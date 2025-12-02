@@ -386,69 +386,8 @@ func (fs *Temporal) output(ctx context.Context, dir string) error {
 		fs.logger.Info("No rows parsed.")
 		return nil
 	}
-	minPrice := slices.MinFunc(rows, func(a, b Row) int {
-		return cmp.Compare(a.Price, b.Price)
-	})
 	var schedules []Schedule
-	now := time.Now()
-	for idx, r := range rows {
-		d := r.Timestamp.Sub(now)
-		// is if the next hour block from now?
-		if d < time.Hour && d > 0 {
-			workmodepriority := scheduler.WorkModeLoadFirst
-			batteryfirstgridcharge := scheduler.BatteryFirstGridChargeDisabled
-			// is it expected to be charged in the next hour?
-			switch {
-			case r.PPV > r.Load:
-				// solar will charge it, grid will be used
-				workmodepriority = scheduler.WorkModeLoadFirst
-				batteryfirstgridcharge = scheduler.BatteryFirstGridChargeDisabled
-			case r.SOC < rows[idx+1].SOC && minPrice.Price == r.Price, r.PBatt < 0:
-				// it needs charged
-				workmodepriority = scheduler.WorkModeBatteryFirst
-				batteryfirstgridcharge = scheduler.BatteryFirstGridChargeEnabled
-			}
-			fs.logger.Info(r.Timestamp.Format(time.RFC3339), slog.String("work mode", workmodepriority), slog.String("battery first gridcharge", batteryfirstgridcharge))
-			schedules = append(schedules, Schedule{
-				workmode:              workmodepriority,
-				chargeBatteryFromGrid: batteryfirstgridcharge,
-				soc:                   r.SOC,
-				time:                  r.Timestamp,
-			})
-			//if err = s.Process(ctx, r.Timestamp, workmodepriority, batteryfirstgridcharge, r.SOC); err != nil {
-			//	s.logger.Warn("error", slog.String("error", err.Error()))
-			//}
-			continue
-		}
-		// there should always be a schedule in the array at this point, safe check to be sure
-		if len(schedules) == 0 {
-			return errors.New("schedule is missing next hours action")
-		}
-		var p *Row
-		if idx > 0 {
-			p = &rows[idx-1]
-		}
-		workmodepriority, batteryfirstgridcharge, err := fs.getAction(p, r, minPrice.Price)
-		if err != nil {
-			return err
-		}
-		if workmodepriority == "" {
-			continue
-		}
-		prevSchedule := schedules[len(schedules)-1]
-		if prevSchedule.workmode == workmodepriority && prevSchedule.chargeBatteryFromGrid == batteryfirstgridcharge {
-			if prevSchedule.soc < r.SOC {
-				schedules[len(schedules)-1].soc = r.SOC
-			}
-			continue
-		}
-		schedules = append(schedules, Schedule{
-			workmode:              workmodepriority,
-			chargeBatteryFromGrid: batteryfirstgridcharge,
-			soc:                   r.SOC,
-			time:                  r.Timestamp,
-		})
-	}
+	schedules = fs.getCommands(rows)
 	for _, schedule := range schedules {
 		fs.logger.Info(schedule.time.Format(time.RFC3339), slog.String("work mode", schedule.workmode), slog.String("battery first gridcharge", schedule.chargeBatteryFromGrid))
 		if err = fs.process(ctx, schedule.time, schedule.workmode, schedule.chargeBatteryFromGrid, schedule.soc); err != nil {
@@ -458,38 +397,40 @@ func (fs *Temporal) output(ctx context.Context, dir string) error {
 	return nil
 }
 
-func (fs *Temporal) getAction(p *Row, r Row, minPrice float64) (string, string, error) {
-	if r.PBatt < 0 {
-		if r.PPV > r.Load {
-			// Load First: Work mode priority
-			// Battery first grid charge: Disabled
-			// Load first stop discharge: 10% (dont set min battery when PV will pay for load)
-			action := fmt.Sprintf("%s PV Charge Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
-			fs.logger.Info(action)
-			return scheduler.WorkModeLoadFirst, scheduler.BatteryFirstGridChargeDisabled, nil
+func (fs *Temporal) getCommands(rows []Row) []Schedule {
+	if len(rows) == 0 {
+		return nil
+	}
+	minGridPrice := slices.MinFunc(rows, func(a, b Row) int {
+		return cmp.Compare(a.Price, b.Price)
+	})
+	var commands []Schedule
+
+	for _, row := range rows {
+		var loadPriority string
+		var gridCharge string
+		var soc float64
+
+		if row.PBatt < 0 || row.Price == minGridPrice.Price {
+			loadPriority = scheduler.WorkModeBatteryFirst
+			gridCharge = scheduler.BatteryFirstGridChargeEnabled
+			soc = row.SOC * 100
+		} else {
+			loadPriority = scheduler.WorkModeLoadFirst
+			gridCharge = scheduler.BatteryFirstGridChargeDisabled
+			soc = 10
 		}
 
-		// only charge at cheapest
-		// todo: tariff might go: low, mid, high, mid, high and this doesnt account for that tariff structure
-		if r.Price != minPrice {
-			return scheduler.WorkModeLoadFirst, scheduler.BatteryFirstGridChargeDisabled, nil
-		}
-		// Work mode priority: Battery First
-		// Battery first grid charge: Enabled
-		// Load first stop discharge: 100%
-		action := fmt.Sprintf("%s Grid Charge Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
-		fs.logger.Info(action)
-		return scheduler.WorkModeBatteryFirst, scheduler.BatteryFirstGridChargeEnabled, nil
+		commands = append(commands, Schedule{
+			time:                  row.Timestamp,
+			workmode:              loadPriority,
+			soc:                   soc,
+			chargeBatteryFromGrid: gridCharge,
+		})
 	}
 
-	// its discharging as previous row was gt soc
-	// if its expected to have higher SOC or same SOC for an hour
-	if p != nil && (p.SOC > r.SOC) {
-		action := fmt.Sprintf("%s Use Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
-		fs.logger.Info(action)
-		return scheduler.WorkModeLoadFirst, scheduler.BatteryFirstGridChargeDisabled, nil
-	}
-	return "", "", nil
+	return commands
+
 }
 
 type Row struct {
