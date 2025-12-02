@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
+	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/temporal/emhass"
 	"github.com/beaujr/emprometheus/internal/temporal/inverter"
 	"github.com/google/uuid"
@@ -100,12 +101,18 @@ func (fs *Temporal) Start(ctx context.Context) error {
 		})
 
 	}
+
+	errGrp.Go(func() error {
+		return fs.i.Start(ctx)
+	})
+
 	errGrp.Go(func() error {
 		if err := fs.InitForecastSchedule(ctx); err != nil {
 			return err
 		}
 		return nil
 	})
+
 	return errGrp.Wait()
 
 }
@@ -113,7 +120,10 @@ func (fs *Temporal) Start(ctx context.Context) error {
 func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, p prometheus.Reporter, cron string, mpc bool) (*Temporal, error) {
 	s := c.ScheduleClient()
 	f := emhass.New(s, tariffs, p)
-	i := inverter.New(s)
+	i, err := inverter.New(s)
+	if err != nil {
+		return nil, err
+	}
 	return &Temporal{
 		logger:  logger,
 		c:       c,
@@ -242,7 +252,6 @@ func (fs *Temporal) setUpForecastWorkflows(ctx context.Context) error {
 			return err
 		}
 	}
-	// trigger on init
 	return sch.Trigger(ctx, client.ScheduleTriggerOptions{})
 }
 func (fs *Temporal) process(ctx context.Context, t time.Time, workmodepriority, batteryfirstgridcharge string, soc float64) error {
@@ -386,18 +395,18 @@ func (fs *Temporal) output(ctx context.Context, dir string) error {
 		d := r.Timestamp.Sub(now)
 		// is if the next hour block from now?
 		if d < time.Hour && d > 0 {
-			workmodepriority := workModePriorityLoadFirst
-			batteryfirstgridcharge := batteryFirstGridChargeDisabled
+			workmodepriority := scheduler.WorkModeLoadFirst
+			batteryfirstgridcharge := scheduler.BatteryFirstGridChargeDisabled
 			// is it expected to be charged in the next hour?
 			switch {
 			case r.PPV > r.Load:
 				// solar will charge it, grid will be used
-				workmodepriority = workModePriorityLoadFirst
-				batteryfirstgridcharge = batteryFirstGridChargeDisabled
+				workmodepriority = scheduler.WorkModeLoadFirst
+				batteryfirstgridcharge = scheduler.BatteryFirstGridChargeDisabled
 			case r.SOC < rows[idx+1].SOC && minPrice.Price == r.Price, r.PBatt < 0:
 				// it needs charged
-				workmodepriority = workModePriorityBatteryFirst
-				batteryfirstgridcharge = batteryFirstGridChargeEnabled
+				workmodepriority = scheduler.WorkModeBatteryFirst
+				batteryfirstgridcharge = scheduler.BatteryFirstGridChargeEnabled
 			}
 			fs.logger.Info(r.Timestamp.Format(time.RFC3339), slog.String("work mode", workmodepriority), slog.String("battery first gridcharge", batteryfirstgridcharge))
 			schedules = append(schedules, Schedule{
@@ -449,13 +458,6 @@ func (fs *Temporal) output(ctx context.Context, dir string) error {
 	return nil
 }
 
-const (
-	workModePriorityLoadFirst      = "Load first"
-	workModePriorityBatteryFirst   = "Battery first"
-	batteryFirstGridChargeEnabled  = "Enabled"
-	batteryFirstGridChargeDisabled = "Disabled"
-)
-
 func (fs *Temporal) getAction(p *Row, r Row, minPrice float64) (string, string, error) {
 	if r.PBatt < 0 {
 		if r.PPV > r.Load {
@@ -464,20 +466,20 @@ func (fs *Temporal) getAction(p *Row, r Row, minPrice float64) (string, string, 
 			// Load first stop discharge: 10% (dont set min battery when PV will pay for load)
 			action := fmt.Sprintf("%s PV Charge Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
 			fs.logger.Info(action)
-			return workModePriorityLoadFirst, batteryFirstGridChargeDisabled, nil
+			return scheduler.WorkModeLoadFirst, scheduler.BatteryFirstGridChargeDisabled, nil
 		}
 
 		// only charge at cheapest
 		// todo: tariff might go: low, mid, high, mid, high and this doesnt account for that tariff structure
 		if r.Price != minPrice {
-			return workModePriorityLoadFirst, batteryFirstGridChargeDisabled, nil
+			return scheduler.WorkModeLoadFirst, scheduler.BatteryFirstGridChargeDisabled, nil
 		}
 		// Work mode priority: Battery First
 		// Battery first grid charge: Enabled
 		// Load first stop discharge: 100%
 		action := fmt.Sprintf("%s Grid Charge Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
 		fs.logger.Info(action)
-		return workModePriorityBatteryFirst, batteryFirstGridChargeEnabled, nil
+		return scheduler.WorkModeBatteryFirst, scheduler.BatteryFirstGridChargeEnabled, nil
 	}
 
 	// its discharging as previous row was gt soc
@@ -485,7 +487,7 @@ func (fs *Temporal) getAction(p *Row, r Row, minPrice float64) (string, string, 
 	if p != nil && (p.SOC > r.SOC) {
 		action := fmt.Sprintf("%s Use Battery: %f to %f", r.Timestamp.Local().Format(time.RFC3339), r.PBatt, r.SOC*100)
 		fs.logger.Info(action)
-		return workModePriorityLoadFirst, batteryFirstGridChargeDisabled, nil
+		return scheduler.WorkModeLoadFirst, scheduler.BatteryFirstGridChargeDisabled, nil
 	}
 	return "", "", nil
 }
