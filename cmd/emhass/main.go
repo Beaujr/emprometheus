@@ -101,7 +101,7 @@ func main() {
 			}
 			c = temporalClient
 			defer c.Close()
-			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, querier, *temporalSchedule, *mpc)
+			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, querier, *dir, *temporalSchedule, *mpc)
 			if err != nil {
 				panic(err.Error())
 			}

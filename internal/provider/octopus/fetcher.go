@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -74,9 +75,9 @@ func (o *Octopus) GenerateOctopusTariff() error {
 		}
 	}()
 	now := time.Now()
+	steps := 24
 	start := now.Truncate(time.Hour).Add(time.Hour)
 
-	steps := 24
 	t := start
 	var contents [][]byte
 	for i := 0; i < steps; i++ {
@@ -87,12 +88,26 @@ func (o *Octopus) GenerateOctopusTariff() error {
 				contents = append(contents, []byte(line))
 			}
 		}
-		t = t.Add(time.Hour)
+		step := float64(24*60) / float64(steps*60)
+		d := time.Duration(step * 60)
+		t = t.Add(d * time.Minute)
 	}
 	if len(contents) != steps {
 		// todo fix later, but useful for debug now
-		if o.product == "COSY-FIX-12M-25-09-24" && o.tariff == "E-1R-COSY-FIX-12M-25-09-24-N" {
+		switch {
+		case o.product == "COSY-FIX-12M-25-09-24" && o.tariff == "E-1R-COSY-FIX-12M-25-09-24-N":
 			return produceOctopusCosyTariff(o.dir)
+		case strings.HasPrefix(o.product, "AGILE"):
+			t = time.Now()
+			for _, row := range r.Results {
+				if row.ValidFrom.Before(t) && row.ValidFrom.After(t.AddDate(0, 0, -1)) {
+					// Print CSV line
+					line := fmt.Sprintf("%s,%.4f\n", t.Local().Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
+					contents = append(contents, []byte(line))
+				}
+			}
+		default:
+			return provider.TariffNotAvailable
 		}
 		return provider.TariffNotAvailable
 	}
