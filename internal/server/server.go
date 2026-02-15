@@ -9,8 +9,11 @@ import (
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/prometheus/common/model"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -43,11 +46,60 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 		return
 	})
 	mux.HandleFunc("/process", func(w http.ResponseWriter, r *http.Request) {
-		if err := s.scheduler.Run(ctx, dir); err != nil {
+		method := provider.ActionForecast
+		if forecastMethod := r.Header.Get("Forecast-Method"); len(forecastMethod) > 0 {
+			method = forecastMethod
+		}
+		if err := s.scheduler.Run(ctx, dir, method); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 			return
 		}
+		return
+	})
+	mux.HandleFunc("/action/{forecast}", func(w http.ResponseWriter, r *http.Request) {
+		c := http.Client{Timeout: 10 * time.Second}
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:5000%s", r.URL.Path), r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		resp, err := c.Do(req)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, err = io.Copy(w, resp.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		fm := r.PathValue("forecast")
+		if err = copyFile(filepath.Join(dir, provider.CSVForecastName), filepath.Join(dir, fmt.Sprintf("%s.csv", fm))); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+	})
+	mux.HandleFunc("/schedule", func(w http.ResponseWriter, r *http.Request) {
+		fs, err := os.ReadFile(filepath.Join(dir, provider.CSVScheduleName))
+		if err != nil {
+			if _, err = w.Write([]byte(err.Error())); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if _, err = w.Write(fs); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 		return
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +117,23 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 	srv := http.Server{Addr: ":8123", Handler: mux}
 
 	return &srv
+}
+
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	return err
 }
 
 func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {

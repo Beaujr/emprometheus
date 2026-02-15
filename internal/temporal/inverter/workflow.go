@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	WorkflowId = "inverterworkflow"
+	WorkflowId = "inverter"
 	TaskQueue  = "inverterqueue"
 )
 
@@ -68,30 +68,9 @@ func (i *Inverter) Activity(ctx context.Context, workmodepriority, batteryfirstg
 	logger := activity.GetLogger(ctx)
 	logger.Info("Activity", "workmodepriority", workmodepriority, "batteryfirstgridcharge", batteryfirstgridcharge, "soc", soc)
 
-	if err := i.pp.SetBatteryFirstGridCharge(batteryfirstgridcharge); err != nil {
+	if err := i.pp.Process(batteryfirstgridcharge, workmodepriority, int64(soc)); err != nil {
+		logger.Error("Processing failed.", "Error", err)
 		return "", err
-	}
-	if err := i.pp.SetWorkModePriority(workmodepriority); err != nil {
-		return "", err
-	}
-
-	switch workmodepriority {
-	case scheduler.WorkModeBatteryFirst:
-		currenctSoc, err := i.pp.GetSOC()
-		if err != nil {
-			return "", err
-		}
-		if currenctSoc > int64(soc) {
-			soc = float64(currenctSoc)
-		}
-		if err = i.pp.SetLoadFirstStopDischarge(int64(soc)); err != nil {
-			return "", err
-		}
-	default:
-		// always allow discharging to 10 (minimum) unless explicitly grid charging
-		if err := i.pp.SetLoadFirstStopDischarge(int64(soc)); err != nil {
-			return "", err
-		}
 	}
 
 	return fmt.Sprintf("Executed workmodepriority: %s, batteryfirstgridcharge, %s to SOC %f", workmodepriority, batteryfirstgridcharge, soc), nil
