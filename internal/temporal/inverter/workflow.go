@@ -2,9 +2,10 @@ package inverter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/beaujr/emprometheus/internal/scheduler"
-	"github.com/beaujr/emprometheus/internal/solarassistant"
+	"github.com/beaujr/emprometheus/internal/store"
 	"go.temporal.io/sdk/client"
 	"log/slog"
 	"time"
@@ -21,16 +22,14 @@ const (
 type Inverter struct {
 	s  client.ScheduleClient
 	pp scheduler.ControllablePowerPlant
+	db store.ReadOnlyStore
 }
 
-func New(s client.ScheduleClient) (*Inverter, error) {
-	sa, err := solarassistant.New()
-	if err != nil {
-		return nil, err
-	}
+func New(s client.ScheduleClient, db store.ReadOnlyStore, sa scheduler.ControllablePowerPlant) (*Inverter, error) {
 	return &Inverter{
 		s:  s,
 		pp: sa,
+		db: db,
 	}, nil
 }
 
@@ -41,7 +40,7 @@ func (i *Inverter) Start(ctx context.Context) error {
 	return nil
 }
 
-func (i *Inverter) Workflow(ctx workflow.Context, scheduleId, workmodepriority, batteryfirstgridcharge string, soc float64) (string, error) {
+func (i *Inverter) Workflow(ctx workflow.Context, scheduleId, workmodepriority, batteryfirstgridcharge string, soc float64, timestamp string) (string, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Second,
 	}
@@ -52,9 +51,20 @@ func (i *Inverter) Workflow(ctx workflow.Context, scheduleId, workmodepriority, 
 		logger.Warn("failed to delete schedule", slog.String("scheduleId", scheduleId))
 	}
 	logger.Info("Emprometheus workflow started", "workmodepriority", workmodepriority, "batteryfirstgridcharge", batteryfirstgridcharge, "soc", soc)
+	currentSoc, err := i.pp.GetCurrentSOC()
+	if err != nil {
+		logger.Warn("failed to get current soc", slog.String("scheduleId", scheduleId))
+	}
+	t, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		return "", err
+	}
 
+	if err = i.db.SetActualSoc(t, float64(currentSoc)/100); err != nil {
+		logger.Warn("failed to set actual soc", slog.String("scheduleId", scheduleId))
+	}
 	var result string
-	err := workflow.ExecuteActivity(ctx, i.Activity, workmodepriority, batteryfirstgridcharge, soc).Get(ctx, &result)
+	err = workflow.ExecuteActivity(ctx, i.Activity, workmodepriority, batteryfirstgridcharge, soc, t).Get(ctx, &result)
 	if err != nil {
 		logger.Error("Activity failed.", "Error", err)
 		return "", err
@@ -64,11 +74,19 @@ func (i *Inverter) Workflow(ctx workflow.Context, scheduleId, workmodepriority, 
 	return result, nil
 }
 
-func (i *Inverter) Activity(ctx context.Context, workmodepriority, batteryfirstgridcharge string, soc float64) (string, error) {
+func (i *Inverter) Activity(ctx context.Context, workmodepriority, batteryfirstgridcharge string, soc float64, t time.Time) (string, error) {
+	timestamp := t.Format(time.RFC3339)
 	logger := activity.GetLogger(ctx)
-	logger.Info("Activity", "workmodepriority", workmodepriority, "batteryfirstgridcharge", batteryfirstgridcharge, "soc", soc)
-
-	if err := i.pp.Process(batteryfirstgridcharge, workmodepriority, int64(soc)); err != nil {
+	logger.Info("Activity Args", "workmodepriority", workmodepriority, "batteryfirstgridcharge", batteryfirstgridcharge, "soc", soc, "timestamp", timestamp)
+	r, err := i.db.Find(t)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			return "", err
+		}
+		logger.Warn("Unable to find schedule in database", "timestamp", t.Format(time.RFC3339))
+	}
+	logger.Info("Activity Stored", "workmodepriority", r.WorkMode, "batteryfirstgridcharge", r.GridCharge, "soc", r.TargetSOC, "timestamp", timestamp)
+	if err = i.pp.Process(batteryfirstgridcharge, workmodepriority, int64(soc)); err != nil {
 		logger.Error("Processing failed.", "Error", err)
 		return "", err
 	}

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
+	"github.com/beaujr/emprometheus/internal/store"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"net/http"
@@ -30,14 +30,14 @@ var (
 type Forecaster struct {
 	tariff  provider.RateFetcher
 	s       client.ScheduleClient
-	p       prometheus.Reporter
+	getSoc  func() (int64, error)
 	c       http.Client
-	dir     string
 	horizon int64
+	db      store.ReadOnlyStore
 }
 
-func New(s client.ScheduleClient, tariff provider.RateFetcher, p prometheus.Reporter, c http.Client, dir string) *Forecaster {
-	return &Forecaster{tariff: tariff, s: s, p: p, c: c, dir: dir, horizon: 6}
+func New(s client.ScheduleClient, tariff provider.RateFetcher, getSoc func() (int64, error), c http.Client, db store.Store) *Forecaster {
+	return &Forecaster{tariff: tariff, s: s, getSoc: getSoc, c: c, horizon: 6, db: db}
 }
 
 func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emhassUrl, emprometheusUrl string) (string, error) {

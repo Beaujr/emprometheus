@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
+	"github.com/beaujr/emprometheus/internal/store"
 	"github.com/prometheus/common/model"
 	"io"
 	"log/slog"
@@ -24,15 +26,17 @@ type Server struct {
 	tariff    provider.RateFetcher
 	dir       string
 	scheduler scheduler.Scheduler
+	db        store.Store
 }
 
-func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir string, scheduler scheduler.Scheduler, mpc bool) *http.Server {
+func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir string, scheduler scheduler.Scheduler, mpc bool, db store.Store) *http.Server {
 	s := &Server{
 		logger:    logger,
 		r:         r,
 		tariff:    tariffs,
 		dir:       dir,
 		scheduler: scheduler,
+		db:        db,
 	}
 
 	mux := http.NewServeMux()
@@ -79,27 +83,34 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			return
 		}
 		fm := r.PathValue("forecast")
-		if err = copyFile(filepath.Join(dir, provider.CSVForecastName), filepath.Join(dir, fmt.Sprintf("%s.csv", fm))); err != nil {
+		if err = s.copyFile(dir, provider.CSVForecastName, fm); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 			return
 		}
 	})
 	mux.HandleFunc("/schedule", func(w http.ResponseWriter, r *http.Request) {
-		fs, err := os.ReadFile(filepath.Join(dir, provider.CSVScheduleName))
+		startOfToday := time.Date(
+			time.Now().Year(),
+			time.Now().Month(),
+			time.Now().Day(),
+			0, 0, 0, 0,
+			time.Now().Location(),
+		)
+		rows, err := db.Select(startOfToday)
 		if err != nil {
-			if _, err = w.Write([]byte(err.Error())); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		if _, err = w.Write([]byte("Optimization,time,Work Mode, Grid Charge, Stop Discharge at SOC, Target SOC\n")); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		for _, row := range rows {
+			if _, err = w.Write([]byte(row.String() + "\n")); err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-			w.WriteHeader(http.StatusInternalServerError)
-			return
 		}
-		if _, err = w.Write(fs); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
 		return
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -119,20 +130,32 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 	return &srv
 }
 
-func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
+func (s *Server) copyFile(dir, src, forecastMethod string) error {
+	sourceFile, err := os.Open(filepath.Join(dir, src))
 	if err != nil {
 		return err
 	}
 	defer sourceFile.Close()
-
-	destFile, err := os.Create(dst)
+	_, err = sourceFile.Seek(0, io.SeekStart)
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, sourceFile)
+	reader := bufio.NewScanner(sourceFile)
+	idx := 0
+	for reader.Scan() {
+		if idx == 0 {
+			idx++
+			continue
+		}
+		o, err := store.OptimizationFromString(fmt.Sprintf("%s,%s", forecastMethod, reader.Text()))
+		if err != nil {
+			return err
+		}
+		err = s.db.InsertOptimization(o)
+		if err != nil {
+			return err
+		}
+	}
 	return err
 }
 
