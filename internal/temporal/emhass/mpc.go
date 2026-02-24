@@ -5,12 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/beaujr/emprometheus/internal/provider"
-	"github.com/prometheus/common/model"
+	"github.com/beaujr/emprometheus/internal/store"
 	"go.temporal.io/sdk/temporal"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -29,18 +26,11 @@ func (f *Forecaster) MPCWorkflow(ctx workflow.Context, emhassUrl, emprometheusUr
 	logger := workflow.GetLogger(ctx)
 	logger.Info("forecast workflow started", "url", emhassUrl)
 	// get current soc
-	v, _, err := f.p.Query(context.Background(), *soc, time.Now())
+	v, err := f.getSoc()
 	if err != nil {
 		return "", err
 	}
-	if len(v.(model.Vector)) == 0 {
-		return "", err
-	}
-	value := v.(model.Vector)[0].Value.String()
-	batterySOC, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return "", err
-	}
+	batterySOC := float64(v)
 	var finalSOC float64
 	err = workflow.ExecuteActivity(ctx, f.GetHorizonSOCActivity, emprometheusUrl).Get(ctx, &finalSOC)
 	if err != nil {
@@ -72,39 +62,51 @@ func (f *Forecaster) MPCWorkflow(ctx workflow.Context, emhassUrl, emprometheusUr
 }
 
 func (f *Forecaster) GetHorizonSOCActivity(ctx context.Context) (float64, error) {
-	out, err := os.ReadFile(filepath.Join(f.dir, fmt.Sprintf("%s.csv", provider.ActionForecast)))
-	if err != nil {
-		return 0, err
-	}
 	now := time.Now()
-	finalSOC := 0.0
-	for idx, line := range strings.Split(string(out), "\n") {
-		if idx == 0 {
+	rows, err := f.db.Select(now)
+	if err != nil {
+		return 0.0, err
+	}
+	var r *store.Row
+	for i, scheduleRow := range rows {
+		if scheduleRow.Time.Before(now) {
 			continue
 		}
-		pieces := strings.Split(line, ",")
-		if len(pieces) > 0 {
-			t, err := time.Parse("2006-01-02 15:04:05-07:00", pieces[0])
-			if err != nil {
-				continue
-			}
-			if t.After(now.Add(time.Duration(f.horizon)*time.Hour)) && t.Before(now.Add(time.Duration(f.horizon+1)*time.Hour)) {
-				finalSOC, err = strconv.ParseFloat(pieces[7], 64)
-				if err != nil {
-					continue
-				}
-				break
-			}
+
+		if scheduleRow.WorkMode == "Load first" &&
+			rows[i+1].WorkMode == "Battery first" {
+			r = &rows[i]
+			break
 		}
 	}
-	return finalSOC, nil
+	// if I cant find the SoC assume fully charged
+	if r == nil {
+		return 1.0, nil
+	}
+
+	f.horizon = int64(r.Time.Sub(now).Hours())
+	if f.horizon < 5 {
+		f.horizon = 5
+		fiveHourstime, err := f.db.Find(time.Date(
+			now.Year(),
+			now.Month(),
+			now.Day(),
+			now.Hour()+5,
+			0, 0, 0,
+			now.Location(),
+		))
+		if err != nil {
+			return 0.0, err
+		}
+		return fiveHourstime.TargetSOC, nil
+	}
+	return r.TargetSOC, nil
 
 }
 
 func (f *Forecaster) MPCActivity(ctx context.Context, emhassUrl string, currentSoc, finalSoc float64) (int, error) {
 	defer func() {
-		err := recover()
-		if err != nil {
+		if err := recover(); err != nil {
 			return
 		}
 	}()

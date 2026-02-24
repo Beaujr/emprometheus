@@ -3,23 +3,23 @@ package temporal
 import (
 	"cmp"
 	"context"
-	"encoding/csv"
 	"errors"
 	"fmt"
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
+	"github.com/beaujr/emprometheus/internal/solarassistant"
+	"github.com/beaujr/emprometheus/internal/store"
 	"github.com/beaujr/emprometheus/internal/temporal/emhass"
 	"github.com/beaujr/emprometheus/internal/temporal/inverter"
 	"github.com/google/uuid"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	temporal2 "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -27,15 +27,16 @@ import (
 )
 
 type Temporal struct {
-	logger  *slog.Logger
-	s       client.ScheduleClient
-	i       *inverter.Inverter
-	c       client.Client
-	f       *emhass.Forecaster
-	tariffs provider.RateFetcher
-	prom    prometheus.Reporter
-	cron    string
-	mpc     bool
+	logger      *slog.Logger
+	s           client.ScheduleClient
+	i           *inverter.Inverter
+	c           client.Client
+	f           *emhass.Forecaster
+	tariffs     provider.RateFetcher
+	db          store.Store
+	cron        string
+	mpc         bool
+	initOnStart bool
 }
 
 type workers struct {
@@ -83,27 +84,40 @@ func (fs *Temporal) Start(ctx context.Context) error {
 	errGrp.Go(func() error {
 		return fs.i.Start(ctx)
 	})
-
-	errGrp.Go(func() error {
-		if err := fs.InitForecastSchedule(ctx); err != nil {
-			return err
-		}
-		return nil
-	})
+	if fs.initOnStart {
+		errGrp.Go(func() error {
+			fs.logger.Info("initializing forecast workflow")
+			if err := fs.InitForecastSchedule(ctx); err != nil {
+				return err
+			}
+			return nil
+		})
+	}
 
 	return errGrp.Wait()
 
 }
 
-func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, p prometheus.Reporter, dir, cron string, mpc bool) (*Temporal, error) {
+type Option func(t *Temporal)
+
+func WithInitOnStart() Option {
+	return func(t *Temporal) {
+		t.initOnStart = true
+	}
+}
+
+func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, p prometheus.Reporter, dir, cron string, mpc bool, db store.Store, opts ...Option) (*Temporal, error) {
 	s := c.ScheduleClient()
-	f := emhass.New(s, tariffs, p, http.Client{Timeout: 60 * time.Second}, dir)
-	//f.MPCActivity(ctx, "http://localhost:8123", 72.00)
-	i, err := inverter.New(s)
+	sa, err := solarassistant.New()
 	if err != nil {
 		return nil, err
 	}
-	return &Temporal{
+	i, err := inverter.New(s, db, sa)
+	f := emhass.New(s, tariffs, sa.GetCurrentSOC, http.Client{Timeout: 60 * time.Second}, db)
+	if err != nil {
+		return nil, err
+	}
+	t := &Temporal{
 		logger:  logger,
 		c:       c,
 		s:       s,
@@ -112,7 +126,12 @@ func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs prov
 		cron:    cron,
 		tariffs: tariffs,
 		mpc:     mpc,
-	}, nil
+		db:      db,
+	}
+	for _, opt := range opts {
+		opt(t)
+	}
+	return t, nil
 }
 
 func (fs *Temporal) InitForecastSchedule(ctx context.Context) error {
@@ -142,11 +161,10 @@ func (fs *Temporal) InitForecastSchedule(ctx context.Context) error {
 				}
 			}
 		}
-		if err := fs.setUpForecastWorkflows(ctx); err != nil {
-			return err
-		}
 	}
-
+	if err := fs.setUpForecastWorkflows(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -162,10 +180,11 @@ func (fs *Temporal) setUpMPCWorkflows(ctx context.Context) error {
 			MaximumAttempts: 1,
 		},
 	}
+	cronSchedule := "58 3,12,21 * * *"
 	_, err := fs.s.Create(ctx, client.ScheduleOptions{
 		ID: scheduleID,
 		Spec: client.ScheduleSpec{
-			CronExpressions: []string{"2 */6 * * *"},
+			CronExpressions: []string{cronSchedule},
 		},
 		Action: action,
 	})
@@ -175,7 +194,7 @@ func (fs *Temporal) setUpMPCWorkflows(ctx context.Context) error {
 			existing := fs.s.GetHandle(ctx, scheduleID)
 			err = existing.Update(ctx, client.ScheduleUpdateOptions{DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &client.ScheduleSpec{
-					CronExpressions: []string{fs.cron},
+					CronExpressions: []string{cronSchedule},
 				}
 				input.Description.Schedule.Action = action
 				return &client.ScheduleUpdate{
@@ -235,13 +254,20 @@ func (fs *Temporal) setUpForecastWorkflows(ctx context.Context) error {
 }
 func (fs *Temporal) process(ctx context.Context, t time.Time, workmodepriority, batteryfirstgridcharge string, soc float64) error {
 	fs.logger.Info(t.Format(time.RFC3339), slog.String("work mode", workmodepriority), slog.String("battery first gridcharge", batteryfirstgridcharge))
+
 	scheduleID := fmt.Sprintf("%s-%d", inverter.WorkflowId, t.Unix())
+	if err := fs.c.ScheduleClient().GetHandle(ctx, scheduleID).Delete(ctx); err != nil {
+		var notFound *serviceerror.NotFound
+		if !errors.As(err, &notFound) {
+			fs.logger.Warn("error deleting schedule", slog.String("scheduleID", scheduleID), slog.String("error", err.Error()))
+		}
+	}
 	action := &client.ScheduleWorkflowAction{
 		ID:        fmt.Sprintf("%s-%s", inverter.WorkflowId, uuid.New()),
 		Workflow:  fs.i.Workflow,
 		TaskQueue: inverter.TaskQueue,
-		Args:      []interface{}{scheduleID, workmodepriority, batteryfirstgridcharge, soc},
-		Memo:      map[string]interface{}{"Work Mode Priority": workmodepriority, "Battery First Grid Charge": batteryfirstgridcharge, "SOC": soc},
+		Args:      []interface{}{scheduleID, workmodepriority, batteryfirstgridcharge, soc, t.Format(time.RFC3339)},
+		Memo:      map[string]interface{}{"Work Mode Priority": workmodepriority, "Battery First Grid Charge": batteryfirstgridcharge, "SOC": soc, "timestamp": t.Format(time.RFC3339)},
 	}
 	_, err := fs.s.Create(ctx, client.ScheduleOptions{
 		ID: scheduleID,
@@ -274,7 +300,6 @@ func (fs *Temporal) process(ctx context.Context, t time.Time, workmodepriority, 
 					}},
 				},
 			},
-			// Required for one-shot schedule so it doesn't fire again
 			EndAt: t.Add(1 * time.Second),
 		},
 		Action: action,
@@ -300,46 +325,10 @@ func (fs *Temporal) process(ctx context.Context, t time.Time, workmodepriority, 
 }
 
 func (fs *Temporal) Run(ctx context.Context, dir, method string) error {
-	schedules, err := fs.s.List(ctx, client.ScheduleListOptions{})
-	if err != nil {
+	if err := fs.output(ctx, method); err != nil {
 		return err
 	}
-	for {
-		if !schedules.HasNext() {
-			break
-		}
-		sle, err := schedules.Next()
-		if err != nil {
-			return err
-		}
-		if strings.HasPrefix(sle.ID, inverter.WorkflowId) {
-			if err = fs.s.GetHandle(ctx, sle.ID).Delete(ctx); err != nil {
-				if err.Error() != "workflow execution already completed" {
-					return err
-				}
-			}
-		}
-	}
-	if _, err = os.Stat(filepath.Join(dir, provider.CSVForecastName)); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		switch fs.mpc {
-		case true:
-			if err = fs.setUpMPCWorkflows(ctx); err != nil {
-				return err
-			}
-		default:
-			if err = fs.InitForecastSchedule(ctx); err != nil {
-				return err
-			}
-		}
-
-	}
-	if err = fs.output(ctx, dir, method); err != nil {
-		return err
-	}
-	return err
+	return nil
 }
 
 type Schedule struct {
@@ -348,35 +337,39 @@ type Schedule struct {
 	time                            time.Time
 }
 
-func (fs *Temporal) output(ctx context.Context, dir, method string) error {
-	file, err := os.Open(filepath.Join(dir, fmt.Sprintf("%s.csv", method)))
+func (fs *Temporal) output(ctx context.Context, method string) error {
+	rows, err := fs.db.SelectOptimization(time.Now(), method)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	reader := csv.NewReader(file)
-	allRows, err := reader.ReadAll()
-	if err != nil {
-		panic(err)
-	}
-	var rows []Row
-	for i := 1; i < len(allRows); i++ {
-		r := allRows[i]
-
-		t, err := time.Parse("2006-01-02 15:04:05-07:00", r[0])
-		if err != nil {
-			fmt.Println("Timestamp parse error:", r[0], err)
-			continue
-		}
-		rows = append(rows, Row{
-			Timestamp: t,
-			PPV:       parseFloat(r[1]),
-			Load:      parseFloat(r[2]),
-			PBatt:     parseFloat(r[6]),
-			SOC:       parseFloat(r[7]),
-			Price:     parseFloat(r[8]),
-		})
-	}
+	//file, err := os.Open(filepath.Join(dir, fmt.Sprintf("%s.csv", method)))
+	//if err != nil {
+	//	return err
+	//}
+	//defer file.Close()
+	//reader := csv.NewReader(file)
+	//allRows, err := reader.ReadAll()
+	//if err != nil {
+	//	return err
+	//}
+	//var rows []Row
+	//for i := 1; i < len(allRows); i++ {
+	//	r := allRows[i]
+	//
+	//	t, err := time.Parse("2006-01-02 15:04:05-07:00", r[0])
+	//	if err != nil {
+	//		fmt.Println("Timestamp parse error:", r[0], err)
+	//		continue
+	//	}
+	//	rows = append(rows, Row{
+	//		Timestamp: t,
+	//		PPV:       parseFloat(r[1]),
+	//		Load:      parseFloat(r[2]),
+	//		PBatt:     parseFloat(r[6]),
+	//		SOC:       parseFloat(r[7]),
+	//		Price:     parseFloat(r[8]),
+	//	})
+	//}
 
 	if len(rows) == 0 {
 		fs.logger.Info("No rows parsed.")
@@ -385,21 +378,16 @@ func (fs *Temporal) output(ctx context.Context, dir, method string) error {
 	var schedules []Schedule
 	schedules = fs.getCommands(rows)
 
-	var s *os.File
-	for idx, schedule := range schedules {
-		if idx == 0 {
-			f, err := os.Create(filepath.Join(dir, provider.CSVScheduleName))
-			if err != nil {
-				return err
-			}
-			s = f
-			defer s.Close()
-			if _, err = s.WriteString("time,Work Mode, Grid Charge, Stop Discharge at SOC, Target SOC\n"); err != nil {
-				return err
-			}
-		}
+	for _, schedule := range schedules {
 		fs.logger.Info(schedule.time.Format(time.RFC3339), slog.String("work mode", schedule.workmode), slog.String("battery first gridcharge", schedule.chargeBatteryFromGrid))
-		if _, err = s.WriteString(fmt.Sprintf("%s,%s,%s,%.2f,%.2f\n", schedule.time.Format(time.RFC3339), schedule.workmode, schedule.chargeBatteryFromGrid, schedule.soc, schedule.targetSOC)); err != nil {
+		if err = fs.db.Upsert(store.Row{
+			Optimization:     method,
+			Time:             schedule.time,
+			WorkMode:         schedule.workmode,
+			GridCharge:       schedule.chargeBatteryFromGrid,
+			StopDischargeSOC: schedule.soc,
+			TargetSOC:        schedule.targetSOC,
+		}); err != nil {
 			return err
 		}
 		if err = fs.process(ctx, schedule.time, schedule.workmode, schedule.chargeBatteryFromGrid, schedule.soc); err != nil {
@@ -409,22 +397,15 @@ func (fs *Temporal) output(ctx context.Context, dir, method string) error {
 	return nil
 }
 
-func (fs *Temporal) getCommands(rows []Row) []Schedule {
+func (fs *Temporal) getCommands(rows []store.OptimizationResult) []Schedule {
 	if len(rows) == 0 {
 		return nil
 	}
-
-	//
-	// 1. Find minimum grid price (cheapest tariff)
-	//
-	minGridRow := slices.MinFunc(rows, func(a, b Row) int {
-		return cmp.Compare(a.Price, b.Price)
+	minGridRow := slices.MinFunc(rows, func(a, b store.OptimizationResult) int {
+		return cmp.Compare(a.UnitLoadCost, b.UnitLoadCost)
 	})
-	minPrice := minGridRow.Price
+	minPrice := minGridRow.UnitLoadCost
 
-	//
-	// 2. Identify continuous blocks of cheapest hours
-	//
 	type block struct {
 		start int
 		end   int
@@ -435,7 +416,7 @@ func (fs *Temporal) getCommands(rows []Row) []Schedule {
 	startIdx := 0
 
 	for i := range rows {
-		if rows[i].Price == minPrice {
+		if rows[i].UnitProdPrice == minPrice {
 			if !inBlock {
 				inBlock = true
 				startIdx = i
@@ -451,17 +432,14 @@ func (fs *Temporal) getCommands(rows []Row) []Schedule {
 		blocks = append(blocks, block{start: startIdx, end: len(rows) - 1})
 	}
 
-	//
-	// 3. Build monotonic SoC table for the entire day
-	//
 	monotonicSOC := make([]float64, len(rows))
 
 	for _, b := range blocks {
 		// First hour SoC target (converted to %)
-		lastSOC := rows[b.start].SOC * 100
+		lastSOC := rows[b.start].SOCOpt * 100
 
 		for i := b.start; i <= b.end; i++ {
-			target := rows[i].SOC * 100
+			target := rows[i].SOCOpt * 100
 
 			// Only allow increases inside the block
 			if target > lastSOC {
@@ -472,16 +450,13 @@ func (fs *Temporal) getCommands(rows []Row) []Schedule {
 		}
 	}
 
-	//
-	// 4. Build final inverter command list
-	//
 	var commands []Schedule
 	for i, row := range rows {
 		workMode := scheduler.WorkModeLoadFirst
 		gridCharge := scheduler.BatteryFirstGridChargeDisabled
 		soc := 10.0 // default load-first SoC
 
-		if row.Price == minPrice {
+		if row.UnitLoadCost == minPrice {
 			// Inside cheap block
 			workMode = scheduler.WorkModeBatteryFirst
 			gridCharge = scheduler.BatteryFirstGridChargeEnabled
@@ -489,11 +464,11 @@ func (fs *Temporal) getCommands(rows []Row) []Schedule {
 		}
 
 		commands = append(commands, Schedule{
-			time:                  row.Timestamp,
+			time:                  row.Time,
 			workmode:              workMode,
 			soc:                   soc,
 			chargeBatteryFromGrid: gridCharge,
-			targetSOC:             row.SOC,
+			targetSOC:             row.SOCOpt,
 		})
 	}
 

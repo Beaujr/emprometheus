@@ -7,8 +7,10 @@ toolchain go1.24.1
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/google/uuid v1.6.0
+	github.com/lib/pq v1.11.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/common v0.67.2
+	go.temporal.io/api v1.54.0
 	go.temporal.io/sdk v1.38.0
 	golang.org/x/sync v0.17.0
 )
@@ -30,7 +32,6 @@ require (
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
-	go.temporal.io/api v1.54.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect

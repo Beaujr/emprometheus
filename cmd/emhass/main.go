@@ -9,6 +9,7 @@ import (
 	"github.com/beaujr/emprometheus/internal/provider/octopus"
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	s "github.com/beaujr/emprometheus/internal/server"
+	"github.com/beaujr/emprometheus/internal/store"
 	"github.com/beaujr/emprometheus/internal/temporal"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
@@ -24,21 +25,23 @@ import (
 )
 
 var (
-	dir               = flag.String("dir", "./emhass_config/data", "the directory to serve files from")
-	tariff            = flag.Bool("tariff", false, "generate tariff files")
-	process           = flag.Bool("process", false, "process emhasses")
-	server            = flag.Bool("server", false, "run data server")
-	promApi           = flag.String("prometheus", "http://192.168.1.112:9090", "http://promapi:port")
-	promUser          = flag.String("prometheus.user", "", "http://promapi:port")
-	promPass          = flag.String("prometheus.pass", "", "http://promapi:port")
-	octopusProduct    = flag.String("octopus.product", "COSY-FIX-12M-25-09-24", "Octopus Product")
-	octopusTariff     = flag.String("octopus.tariff", "E-1R-COSY-FIX-12M-25-09-24-N", "Octopus Tariff")
-	useTemporal       = flag.Bool("temporal.enable", false, "use temporal")
-	temporalNamespace = flag.String("temporal.namespace", "beau", "temporal namespace")
-	temporalAddress   = flag.String("temporal.address", "temporal-frontend-headless.temporal.svc.cluster.local:7233", "temporal address")
-	temporalSchedule  = flag.String("temporal.schedule", "2 11,23 * * *", "temporal schedule")
-	temporalTLS       = flag.Bool("temporal.tls", false, "TLS connection for temporal client")
-	mpc               = flag.Bool("mpc", false, "use mpc or just rely on forecast")
+	dir                    = flag.String("dir", "./emhass_config/data", "the directory to serve files from")
+	tariff                 = flag.Bool("tariff", false, "generate tariff files")
+	process                = flag.Bool("process", false, "process emhasses")
+	server                 = flag.Bool("server", false, "run data server")
+	promApi                = flag.String("prometheus", "http://192.168.1.112:9090", "http://promapi:port")
+	promUser               = flag.String("prometheus.user", "", "http://promapi:port")
+	promPass               = flag.String("prometheus.pass", "", "http://promapi:port")
+	octopusProduct         = flag.String("octopus.product", "COSY-FIX-12M-25-09-24", "Octopus Product")
+	octopusTariff          = flag.String("octopus.tariff", "E-1R-COSY-FIX-12M-25-09-24-N", "Octopus Tariff")
+	useTemporal            = flag.Bool("temporal.enable", false, "use temporal")
+	temporalNamespace      = flag.String("temporal.namespace", "beau", "temporal namespace")
+	temporalAddress        = flag.String("temporal.address", "temporal-frontend-headless.temporal.svc.cluster.local:7233", "temporal address")
+	temporalSchedule       = flag.String("temporal.schedule", "2 11,23 * * *", "temporal schedule")
+	temporalTLS            = flag.Bool("temporal.tls", false, "TLS connection for temporal client")
+	mpc                    = flag.Bool("mpc", false, "use mpc or just rely on forecast")
+	createSchedulesOnStart = flag.Bool("init", true, "create schedules on application start")
+	dsn                    = flag.String("dsn", "", "postgres DSN if using database to store schedules")
 )
 
 type basicAuthTransport struct {
@@ -92,6 +95,18 @@ func main() {
 			panic(err.Error())
 		}
 		querier := p.New(v1.NewAPI(pclient))
+
+		// use filestore by default
+		storeOpts := []store.Option{store.WithFilestore(*dir, provider.CSVScheduleName)}
+		if *dsn != "" {
+			storeOpts = []store.Option{store.WithPostgres(*dsn)}
+		}
+		db, err := store.New(storeOpts...)
+		if err != nil {
+			panic(err.Error())
+		}
+		defer db.Close()
+
 		var c temporalsdk.Client
 		var sch scheduler.Scheduler = &scheduler.DebugScheduler{}
 		if *useTemporal {
@@ -101,14 +116,18 @@ func main() {
 			}
 			c = temporalClient
 			defer c.Close()
-			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, querier, *dir, *temporalSchedule, *mpc)
+			var temporalOpts []temporal.Option
+			if *createSchedulesOnStart {
+				temporalOpts = append(temporalOpts, temporal.WithInitOnStart())
+			}
+			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, querier, *dir, *temporalSchedule, *mpc, db, temporalOpts...)
 			if err != nil {
 				panic(err.Error())
 			}
 			sch = temporalScheduler
 		}
 
-		srv := s.NewServer(ctx, logger, rateFetcher, querier, *dir, sch, *mpc)
+		srv := s.NewServer(ctx, logger, rateFetcher, querier, *dir, sch, *mpc, db)
 		errGrp, ctx := errgroup.WithContext(ctx)
 		ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 		defer stop()

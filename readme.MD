@@ -33,6 +33,22 @@ var (
 )
 ```
 
+## Trigger a forecast
+This will fascade a call to emhass and save the output
+```bash
+curl http://localhost:8123/action/dayahead-optim
+curl -X POST \
+  http://localhost:8123/process \
+  -H 'forecast-method: dayahead-optim' 
+```
+
+```bash
+curl http://localhost:8123/action/naive-mpc-optim
+curl -X POST \
+  http://localhost:8123/process \
+  -H 'forecast-method: naive-mpc-optim' 
+```
+
 ## Temporal
 workflow is work in progress but the existing logic is as below
 ```mermaid
