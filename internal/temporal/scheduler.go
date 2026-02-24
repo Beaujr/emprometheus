@@ -416,7 +416,7 @@ func (fs *Temporal) getCommands(rows []store.OptimizationResult) []Schedule {
 	startIdx := 0
 
 	for i := range rows {
-		if rows[i].UnitProdPrice == minPrice {
+		if rows[i].UnitLoadCost == minPrice {
 			if !inBlock {
 				inBlock = true
 				startIdx = i
