@@ -80,6 +80,26 @@ flowchart TD
     B2 -->|6. Generate and save Schedules| D2
     B2 -->|7. Create hourly schedules in Temporal| A2
 ```
-When actions from forecast are [printed to stdout](https://github.com/Beaujr/emprometheus/blob/eeddf7334d76fc7b0e761d0e5a6a6bcc858ea726/internal/temporal/workflow.go#L38) at the moment. But will integrate with SolarAssistant soon.
+### Workflows
+```
+flowchart LR
+
+    subgraph Temporal
+        FW["Forecast Workflow"]
+        MPC["MPC Workflow"]
+        IW["Inverter Workflow"]
+        TS[("Temporal Schedules")]
+    end
+
+    subgraph Device
+        INV["Inverter"]
+    end
+
+    FW -->|Creates 24 hourly schedules| TS
+    MPC -->|Creates / Updates schedules for next X horizon hours| TS
+    TS -->|Triggers scheduled executions| IW
+    IW -->|Applies optimizations| INV
+```
+
 ### Notes
 Currently the tariff generated in the CSV is for Octopus using this is optional.
