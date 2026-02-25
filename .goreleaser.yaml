@@ -2,6 +2,7 @@ before:
   hooks:
     - go mod tidy
     - go mod vendor
+    - go test ./internal/...
 project_name: emprometheus
 builds:
   - env:
