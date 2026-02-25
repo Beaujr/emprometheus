@@ -1,21 +1,28 @@
+# goreleaser v2
+version: 2
+
+project_name: emprometheus
+
 before:
   hooks:
     - go mod tidy
     - go mod vendor
     - go test ./internal/...
-project_name: emprometheus
+
 builds:
-  - env:
-      - CGO_ENABLED=0
-    id: emhass
+  - id: emhass
     main: ./cmd/emhass/main.go
     binary: app
+    env:
+      - CGO_ENABLED=0
     goos:
       - linux
     goarch:
       - amd64
       - arm64
+
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
+
 snapshot:
-  name_template: "{{ .Runtime.Goos}}{{ .Runtime.Goarch }}"
+  name_template: "{{ .Runtime.Goos }}{{ .Runtime.Goarch }}"
