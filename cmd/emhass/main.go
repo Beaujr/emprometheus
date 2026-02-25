@@ -120,7 +120,7 @@ func main() {
 			if *createSchedulesOnStart {
 				temporalOpts = append(temporalOpts, temporal.WithInitOnStart())
 			}
-			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, querier, *dir, *temporalSchedule, *mpc, db, temporalOpts...)
+			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, *temporalSchedule, *mpc, db, temporalOpts...)
 			if err != nil {
 				panic(err.Error())
 			}
