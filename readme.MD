@@ -53,18 +53,33 @@ curl -X POST \
 workflow is work in progress but the existing logic is as below
 ```mermaid
 flowchart TD
+    subgraph Temporal
+        A2["Forecast Workflow - Once every 24 hours"]
+    end
 
-A[Start emhassworkflow] --> B[Fetch tariff information from energy provider]
+    subgraph Services
+        B2["Emprometheus"]
+        C2["Emhass"]
+    end
 
-B --> C{Is 24-hour ahead info available?}
-C -- No --> D[Exit early<br>Keep existing scheduled battery optimisation workflows] --> I[Wait 1 hour<br>Run again]
-C -- Yes --> E[Generate 24-hour ahead forecast from EMHASS]
+    subgraph Storage
+        D2[("Optimization Store")]
+    end
 
-E --> F[Delete existing scheduled actions for battery optimisation]
-F --> G[Schedule new actions for next 24 hours based on new forecast]
-G --> I[Wait 1 hour<br>Run again]
+    subgraph FileStorage
+        F2[("opt_res_latest.csvV")]
+    end
+
+
+    A2 -->|1. GET /action/dayahead-optim| B2
+    B2 -->|2. GET /action/dayahead-optim| C2
+    C2 -->|Optimization Result| F2
+    B2 -->|3. Read CSV| F2
+    B2 -->|4. Persist Optimization| D2
+    D2 -->|5. Read Optimization| B2
+    B2 -->|6. Generate and save Schedules| D2
+    B2 -->|7. Create hourly schedules in Temporal| A2
 ```
-
 When actions from forecast are [printed to stdout](https://github.com/Beaujr/emprometheus/blob/eeddf7334d76fc7b0e761d0e5a6a6bcc858ea726/internal/temporal/workflow.go#L38) at the moment. But will integrate with SolarAssistant soon.
 ### Notes
 Currently the tariff generated in the CSV is for Octopus using this is optional.
