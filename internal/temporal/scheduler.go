@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/solarassistant"
@@ -106,7 +105,7 @@ func WithInitOnStart() Option {
 	}
 }
 
-func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, p prometheus.Reporter, dir, cron string, mpc bool, db store.Store, opts ...Option) (*Temporal, error) {
+func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, cron string, mpc bool, db store.Store, opts ...Option) (*Temporal, error) {
 	s := c.ScheduleClient()
 	sa, err := solarassistant.New()
 	if err != nil {
@@ -256,7 +255,7 @@ func (fs *Temporal) process(ctx context.Context, t time.Time, workmodepriority, 
 	fs.logger.Info(t.Format(time.RFC3339), slog.String("work mode", workmodepriority), slog.String("battery first gridcharge", batteryfirstgridcharge))
 
 	scheduleID := fmt.Sprintf("%s-%d", inverter.WorkflowId, t.Unix())
-	if err := fs.c.ScheduleClient().GetHandle(ctx, scheduleID).Delete(ctx); err != nil {
+	if err := fs.s.GetHandle(ctx, scheduleID).Delete(ctx); err != nil {
 		var notFound *serviceerror.NotFound
 		if !errors.As(err, &notFound) {
 			fs.logger.Warn("error deleting schedule", slog.String("scheduleID", scheduleID), slog.String("error", err.Error()))
@@ -376,7 +375,7 @@ func (fs *Temporal) output(ctx context.Context, method string) error {
 		return nil
 	}
 	var schedules []Schedule
-	schedules = fs.getCommands(rows)
+	schedules = GetCommands(rows)
 
 	for _, schedule := range schedules {
 		fs.logger.Info(schedule.time.Format(time.RFC3339), slog.String("work mode", schedule.workmode), slog.String("battery first gridcharge", schedule.chargeBatteryFromGrid))
@@ -397,7 +396,7 @@ func (fs *Temporal) output(ctx context.Context, method string) error {
 	return nil
 }
 
-func (fs *Temporal) getCommands(rows []store.OptimizationResult) []Schedule {
+func GetCommands(rows []store.OptimizationResult) []Schedule {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -460,7 +459,14 @@ func (fs *Temporal) getCommands(rows []store.OptimizationResult) []Schedule {
 			// Inside cheap block
 			workMode = scheduler.WorkModeBatteryFirst
 			gridCharge = scheduler.BatteryFirstGridChargeEnabled
-			soc = monotonicSOC[i] // ← monotonic enforced target
+			tSoc := monotonicSOC[i]
+			// if its equal to 10, which is the minimum, then no point setting charge vars
+			if tSoc == soc {
+				workMode = scheduler.WorkModeLoadFirst
+				gridCharge = scheduler.BatteryFirstGridChargeDisabled
+			}
+			soc = tSoc // ← monotonic enforced target
+
 		}
 
 		commands = append(commands, Schedule{
