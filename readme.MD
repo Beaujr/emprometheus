@@ -81,7 +81,7 @@ flowchart TD
     B2 -->|7. Create hourly schedules in Temporal| A2
 ```
 ### Workflows
-```
+```mermaid
 flowchart LR
 
     subgraph Temporal
