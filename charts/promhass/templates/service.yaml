@@ -15,5 +15,9 @@ spec:
       targetPort: promhasshttp
       protocol: TCP
       name: promhasshttp
+    - port: {{ .Values.promhass_service.metrics }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
   selector:
     {{- include "promhass.selectorLabels" . | nindent 4 }}

@@ -43,6 +43,9 @@ spec:
             - name: promhasshttp
               containerPort: {{ .Values.promhass_service.port }}
               protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.promhass_service.metrics }}
+              protocol: TCP
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:

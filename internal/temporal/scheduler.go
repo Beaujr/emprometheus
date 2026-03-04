@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
-	"github.com/beaujr/emprometheus/internal/solarassistant"
 	"github.com/beaujr/emprometheus/internal/store"
 	"github.com/beaujr/emprometheus/internal/temporal/emhass"
 	"github.com/beaujr/emprometheus/internal/temporal/inverter"
@@ -105,12 +104,8 @@ func WithInitOnStart() Option {
 	}
 }
 
-func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, cron string, mpc bool, db store.Store, opts ...Option) (*Temporal, error) {
+func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, sa scheduler.ControllablePowerPlant, cron string, mpc bool, db store.Store, opts ...Option) (*Temporal, error) {
 	s := c.ScheduleClient()
-	sa, err := solarassistant.New()
-	if err != nil {
-		return nil, err
-	}
 	i, err := inverter.New(s, db, sa)
 	f := emhass.New(s, tariffs, sa.GetCurrentSOC, http.Client{Timeout: 60 * time.Second}, db)
 	if err != nil {

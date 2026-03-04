@@ -4,6 +4,7 @@ import (
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/solarassistant"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"log/slog"
 	"strconv"
 	"testing"
 	"time"
@@ -118,7 +119,7 @@ func (f fakeToken) Error() error {
 func TestSolarAssistant(t *testing.T) {
 	var p scheduler.ControllablePowerPlant
 	fc := fakeclient{plant: p}
-	s, err := solarassistant.New(solarassistant.WithMqttClient(&fc))
+	s, err := solarassistant.New(slog.New(slog.DiscardHandler), solarassistant.WithMqttClient(&fc))
 	if err != nil {
 		t.Fatal(err)
 		return
@@ -233,7 +234,7 @@ var scenarios = []struct {
 func TestIntervertCurrentSOCHigherThanTargetSOC(t *testing.T) {
 	var p scheduler.ControllablePowerPlant
 	fc := fakeclient{plant: p}
-	s, err := solarassistant.New(solarassistant.WithMqttClient(&fc))
+	s, err := solarassistant.New(slog.New(slog.DiscardHandler), solarassistant.WithMqttClient(&fc))
 	if err != nil {
 		t.Fatal(err)
 		return
@@ -250,7 +251,7 @@ func TestIntervertCurrentSOCHigherThanTargetSOC(t *testing.T) {
 			s.SetCurrentBatteryFirstGridCharge(tt.initialBatteryFirstGridCharge)
 
 			// set inverter state
-			if err = s.Process(tt.targetBatteryFirstGridCharge, tt.targetWorkModePriority, tt.targetBattery); err != nil {
+			if err = s.Process(t.Context(), tt.targetBatteryFirstGridCharge, tt.targetWorkModePriority, tt.targetBattery); err != nil {
 				t.Fatal(err)
 				return
 			}
