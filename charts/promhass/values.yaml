@@ -53,6 +53,7 @@ emhass_service:
   port: 5000
 promhass_service:
   port: 8123
+  metrics: 2223
 
 ingress:
   enabled: true

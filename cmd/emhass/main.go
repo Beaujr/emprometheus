@@ -9,6 +9,7 @@ import (
 	"github.com/beaujr/emprometheus/internal/provider/octopus"
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	s "github.com/beaujr/emprometheus/internal/server"
+	"github.com/beaujr/emprometheus/internal/solarassistant"
 	"github.com/beaujr/emprometheus/internal/store"
 	"github.com/beaujr/emprometheus/internal/temporal"
 	"github.com/prometheus/client_golang/api"
@@ -120,7 +121,16 @@ func main() {
 			if *createSchedulesOnStart {
 				temporalOpts = append(temporalOpts, temporal.WithInitOnStart())
 			}
-			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, *temporalSchedule, *mpc, db, temporalOpts...)
+			sa, err := solarassistant.New(logger.With(slog.String("pkg", "solarassistant")), solarassistant.WithOTEL())
+			if err != nil {
+				panic(err.Error())
+			}
+			defer func() {
+				if err = sa.Stop(ctx); err != nil {
+					panic(err.Error())
+				}
+			}()
+			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, sa, *temporalSchedule, *mpc, db, temporalOpts...)
 			if err != nil {
 				panic(err.Error())
 			}
@@ -160,6 +170,9 @@ func main() {
 			return srv.Shutdown(shutdownCtx) // makes errgroup return error
 		})
 
+		errGrp.Go(func() error {
+			return p.Serve(logger.With(slog.String("pkg", "prometheus")))
+		})
 		if err = errGrp.Wait(); err != nil {
 			panic(err)
 		}

@@ -5,8 +5,15 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	p "go.opentelemetry.io/otel/exporters/prometheus"
+	"log/slog"
+
 	"github.com/beaujr/emprometheus/internal/scheduler"
+	"go.opentelemetry.io/otel/sdk/metric"
+
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	api "go.opentelemetry.io/otel/metric"
+	"log"
 	"os"
 	"slices"
 	"strconv"
@@ -21,14 +28,43 @@ const (
 	TopicSOCState                    = "solar_assistant/total/battery_state_of_charge/state"
 	TopicDeviceModeState             = "solar_assistant/inverter_1/device_mode/state"
 	TopicBatteryFirstGridChargeState = "solar_assistant/inverter_1/battery_first_grid_charge/state"
+	meterName                        = "github.com/beaujr/emprometheus"
 )
 
 var (
-	mqttServer   = flag.String("mqtt_server", "tcp://mqtt.whickerx.info:9229", "mqtt server address")
-	mqttUser     = flag.String("mqtt_user", "", "mqtt user")
-	mqttPassword = flag.String("mqtt_password", "", "mqtt password")
-	workmodes    = []string{scheduler.WorkModeLoadFirst, scheduler.WorkModeBatteryFirst, scheduler.WorkModeGridFirst}
+	mqttServer                     = flag.String("mqtt_server", "tcp://mqtt.whickerx.info:9229", "mqtt server address")
+	mqttUser                       = flag.String("mqtt_user", "", "mqtt user")
+	mqttPassword                   = flag.String("mqtt_password", "", "mqtt password")
+	workmodes                      = []string{scheduler.WorkModeLoadFirst, scheduler.WorkModeBatteryFirst, scheduler.WorkModeGridFirst}
+	stateOfCharge                  api.Int64ObservableGauge
+	processSuccess, processFailure api.Int64Counter
+	meter                          api.Meter
 )
+
+func init() {
+	exporter, err := p.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+	provider := metric.NewMeterProvider(
+		metric.WithReader(exporter),
+	)
+	meter = provider.Meter(meterName)
+
+	stateOfCharge, err = meter.Int64ObservableGauge("soc", api.WithDescription("State of charge"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	processSuccess, err = meter.Int64Counter("success", api.WithDescription("successful interactions with inverter"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	processFailure, err = meter.Int64Counter("failure", api.WithDescription("failed interactions with inverter"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+}
 
 type state struct {
 	soc                    int64
@@ -115,16 +151,36 @@ func (h *stateHandler) GetDeviceModeTarget() string {
 type SolarAssistant struct {
 	client       mqtt.Client
 	stateHandler *stateHandler
+	logger       *slog.Logger
+	reg          api.Registration
 }
 
-func (sa *SolarAssistant) Start(ctx context.Context) error {
+func (sa *SolarAssistant) Start(_ context.Context) error {
 	if token := sa.client.Connect(); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
 	return nil
 }
 
-func (sa *SolarAssistant) Process(batteryfirstgridcharge string, workmodepriority string, soc int64) error {
+func (sa *SolarAssistant) Stop(_ context.Context) error {
+	if sa.reg != nil {
+		if err := sa.reg.Unregister(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (sa *SolarAssistant) Process(ctx context.Context, batteryfirstgridcharge string, workmodepriority string, soc int64) error {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(error); ok {
+				processFailure.Add(ctx, 1)
+				return
+			}
+		}
+
+	}()
 	if err := sa.SetBatteryFirstGridCharge(batteryfirstgridcharge); err != nil {
 		return err
 	}
@@ -151,7 +207,7 @@ func (sa *SolarAssistant) Process(batteryfirstgridcharge string, workmodepriorit
 			return err
 		}
 	}
-
+	processSuccess.Add(ctx, 1)
 	return nil
 }
 func (sa *SolarAssistant) SetBatteryFirstGridCharge(enabled string) error {
@@ -196,20 +252,35 @@ func (sa *SolarAssistant) SetLoadFirstStopDischarge(soc int64) error {
 	return nil
 }
 
-type Option = func(s *SolarAssistant)
+type Option = func(s *SolarAssistant) error
 
 func WithMqttClient(client mqtt.Client) Option {
-	return func(s *SolarAssistant) {
+	return func(s *SolarAssistant) error {
 		s.client = client
+		return nil
 	}
 }
-func New(opts ...Option) (*SolarAssistant, error) {
+
+func WithOTEL() Option {
+	return func(s *SolarAssistant) error {
+		reg, err := meter.RegisterCallback(s.observe, stateOfCharge)
+		if err != nil {
+			return err
+		}
+		s.reg = reg
+		return nil
+	}
+}
+
+func New(logger *slog.Logger, opts ...Option) (*SolarAssistant, error) {
 	if !flag.Parsed() {
 		flag.Parse()
 	}
-	sa := &SolarAssistant{stateHandler: &stateHandler{state: &state{}, target: &state{}}}
+	sa := &SolarAssistant{stateHandler: &stateHandler{state: &state{}, target: &state{}}, logger: logger}
 	for _, opt := range opts {
-		opt(sa)
+		if err := opt(sa); err != nil {
+			return nil, err
+		}
 	}
 
 	if sa.client == nil {
@@ -232,7 +303,18 @@ func New(opts ...Option) (*SolarAssistant, error) {
 		mqttOpts.SetTLSConfig(tlsConfig)
 		sa.client = mqtt.NewClient(mqttOpts)
 	}
+
 	return sa, nil
+}
+
+func (sa *SolarAssistant) observe(_ context.Context, obs api.Observer) error {
+	soc, err := sa.GetCurrentSOC()
+	if err != nil {
+		return err
+	}
+	obs.ObserveInt64(stateOfCharge, soc)
+	return nil
+
 }
 
 func (sa *SolarAssistant) subscribers(c mqtt.Client) {
@@ -241,7 +323,9 @@ func (sa *SolarAssistant) subscribers(c mqtt.Client) {
 		if err != nil {
 			return
 		}
-		sa.SetCurrentSOC(int64(batterySOC))
+		if err = sa.SetCurrentSOC(int64(batterySOC)); err != nil {
+			sa.logger.Warn("error setting soc", slog.Int64("soc", int64(batterySOC)))
+		}
 	}); token.Wait() && token.Error() != nil {
 		panic(token.Error())
 	}
