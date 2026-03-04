@@ -20,7 +20,26 @@ builds:
     goarch:
       - amd64
       - arm64
-
+dockers:
+  - image_templates:
+      - "ghcr.io/beaujr/emprometheus:{{ .Version }}-amd64"
+    dockerfile: Dockerfile.goreleaser
+    goos: linux
+    goarch: amd64
+    ids:
+      - emhass
+  - image_templates:
+      - "ghcr.io/beaujr/emprometheus:{{ .Version }}-arm64"
+    dockerfile: Dockerfile.goreleaser
+    goos: linux
+    goarch: arm64
+    ids:
+      - emhass
+docker_manifests:
+  - name_template: "ghcr.io/beaujr/emprometheus:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/beaujr/emprometheus:{{ .Version }}-amd64"
+      - "ghcr.io/beaujr/emprometheus:{{ .Version }}-arm64"
 checksum:
   name_template: "checksums.txt"
 
