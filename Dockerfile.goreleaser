@@ -1,5 +1,5 @@
-FROM alpine as builder
-FROM scratch
+FROM --platform=$TARGETPLATFORM alpine as builder
+FROM --platform=$TARGETPLATFORM scratch
 WORKDIR /
 COPY --from=builder /etc/ssl/certs/ /etc/ssl/certs/
 COPY app app
