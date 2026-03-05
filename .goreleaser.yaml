@@ -23,6 +23,7 @@ builds:
 dockers:
   - image_templates:
       - "containers.whickerx.info/emhass:{{ .Version }}-amd64"
+      - "containers.whickerx.info/emhass:latest-amd64"
     dockerfile: Dockerfile.goreleaser
     goos: linux
     goarch: amd64
@@ -30,6 +31,7 @@ dockers:
       - emhass
   - image_templates:
       - "containers.whickerx.info/emhass:{{ .Version }}-arm64"
+      - "containers.whickerx.info/emhass:latest-arm64"
     dockerfile: Dockerfile.goreleaser
     goos: linux
     goarch: arm64
@@ -38,8 +40,8 @@ dockers:
 docker_manifests:
   - name_template: "containers.whickerx.info/emhass:latest"
     image_templates:
-      - "containers.whickerx.info/emhass:{{ .Version }}-amd64"
-      - "containers.whickerx.info/emhass:{{ .Version }}-arm64"
+      - "containers.whickerx.info/emhass:latest-amd64"
+      - "containers.whickerx.info/emhass:latest-arm64"
 checksum:
   name_template: "checksums.txt"
 
