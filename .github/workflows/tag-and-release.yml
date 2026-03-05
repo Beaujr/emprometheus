@@ -38,6 +38,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: stable
+      - name: Container Login
+        uses: docker/login-action@v2.2.0
+        with:
+          registry: containers.whickerx.info
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
