@@ -61,10 +61,10 @@ jobs:
       - name: Get Values.yaml
         env:
           VALUES: ${{ secrets.VALUES }}
-        run: mkdir -p charts/values/ && echo $VALUES  > charts/values/cloud.yaml
+        run: mkdir -p charts/values/ && echo $VALUES  | base64 -d > charts/values/cloud.yaml
       - name: Get k8s setup
         env:
           KUBECONF: ${{ secrets.KUBECONF }}
-        run: mkdir -p ~/.kube/ && echo $KUBECONF  > ~/.kube/config
+        run: mkdir -p ~/.kube/ && echo $KUBECONF  | base64 -d > ~/.kube/config
       - name: Deploy
         run: helm upgrade --install promhass charts/promhass -f charts/values/cloud.yaml
