@@ -25,13 +25,16 @@ dockers:
       - "containers.whickerx.info/emhass:{{ .Version }}-amd64"
       - "containers.whickerx.info/emhass:latest-amd64"
     dockerfile: Dockerfile.goreleaser
+    use: buildx
     goos: linux
     goarch: amd64
     ids:
       - emhass
+
   - image_templates:
       - "containers.whickerx.info/emhass:{{ .Version }}-arm64"
       - "containers.whickerx.info/emhass:latest-arm64"
+    use: buildx
     dockerfile: Dockerfile.goreleaser
     goos: linux
     goarch: arm64
