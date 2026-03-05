@@ -30,6 +30,9 @@ dockers:
     goarch: amd64
     ids:
       - emhass
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/amd64"
 
   - image_templates:
       - "containers.whickerx.info/emhass:{{ .Version }}-arm64"
@@ -40,6 +43,9 @@ dockers:
     goarch: arm64
     ids:
       - emhass
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/arm64"
 docker_manifests:
   - name_template: "containers.whickerx.info/emhass:latest"
     image_templates:
