@@ -33,7 +33,7 @@ type Forecaster struct {
 	getSoc  func() (int64, error)
 	c       http.Client
 	horizon int64
-	db      store.ReadOnlyStore
+	db      store.MinimalStore
 }
 
 func New(s client.ScheduleClient, tariff provider.RateFetcher, getSoc func() (int64, error), c http.Client, db store.Store) *Forecaster {

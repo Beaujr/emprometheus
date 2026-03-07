@@ -12,9 +12,11 @@ const (
 	BatteryFirstGridChargeDisabled = "Disabled"
 )
 
+type ProcessFunc func(ctx context.Context, batteryfirstgridcharge string, workmodepriority string, soc int64) error
+
 type Scheduler interface {
 	InitForecastSchedule(ctx context.Context) error
-	Run(ctx context.Context, dir, method string) error
+	Run(ctx context.Context, method string) error
 	Start(ctx context.Context) error
 }
 type ControllablePowerPlant interface {
@@ -40,7 +42,7 @@ func (DebugScheduler) InitForecastSchedule(ctx context.Context) error {
 	return nil
 }
 
-func (DebugScheduler) Run(ctx context.Context, dir, method string) error {
+func (DebugScheduler) Run(ctx context.Context, method string) error {
 	return nil
 }
 

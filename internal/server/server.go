@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,14 +12,19 @@ import (
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/store"
 	"github.com/prometheus/common/model"
+	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
+
+//go:embed templates/*.html
+var templateFS embed.FS
 
 type Server struct {
 	logger    *slog.Logger
@@ -27,9 +33,11 @@ type Server struct {
 	dir       string
 	scheduler scheduler.Scheduler
 	db        store.Store
+	process   scheduler.ProcessFunc
+	password  string
 }
 
-func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir string, scheduler scheduler.Scheduler, mpc bool, db store.Store) *http.Server {
+func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir, password string, scheduler scheduler.Scheduler, mpc bool, db store.Store, process scheduler.ProcessFunc) *http.Server {
 	s := &Server{
 		logger:    logger,
 		r:         r,
@@ -37,6 +45,8 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 		dir:       dir,
 		scheduler: scheduler,
 		db:        db,
+		process:   process,
+		password:  password,
 	}
 
 	mux := http.NewServeMux()
@@ -54,7 +64,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 		if forecastMethod := r.Header.Get("Forecast-Method"); len(forecastMethod) > 0 {
 			method = forecastMethod
 		}
-		if err := s.scheduler.Run(ctx, dir, method); err != nil {
+		if err := s.scheduler.Run(ctx, method); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 			return
@@ -88,6 +98,49 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			w.Write([]byte(err.Error()))
 			return
 		}
+	})
+
+	var tmpl = template.Must(template.ParseFS(templateFS, "templates/admin.html"))
+	mux.HandleFunc("/admin", func(w http.ResponseWriter, r *http.Request) {
+		_ = tmpl.Execute(w, nil)
+	})
+
+	mux.HandleFunc("/admin/process", func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse := func(success bool, message string) {
+			if err := json.NewEncoder(w).Encode(struct {
+				Success bool   `json:"success"`
+				Message string `json:"message"`
+			}{success, message}); err != nil {
+				w.Write([]byte(err.Error()))
+			}
+		}
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			jsonResponse(false, err.Error())
+			return
+		}
+
+		battery := r.FormValue("batteryfirstgridcharge")
+		workmode := r.FormValue("workmodepriority")
+		socStr := r.FormValue("soc")
+		password = r.FormValue("password")
+		if password != s.password {
+			jsonResponse(false, "password mismatch")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		soc, err := strconv.ParseInt(socStr, 10, 64)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			jsonResponse(false, err.Error())
+			return
+		}
+		if err := s.process(r.Context(), battery, workmode, soc); err != nil {
+			jsonResponse(false, err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		jsonResponse(true, "success")
 	})
 	mux.HandleFunc("/schedule", func(w http.ResponseWriter, r *http.Request) {
 		startOfToday := time.Date(

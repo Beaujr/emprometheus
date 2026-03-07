@@ -22,10 +22,10 @@ const (
 type Inverter struct {
 	s  client.ScheduleClient
 	pp scheduler.ControllablePowerPlant
-	db store.ReadOnlyStore
+	db store.MinimalStore
 }
 
-func New(s client.ScheduleClient, db store.ReadOnlyStore, sa scheduler.ControllablePowerPlant) (*Inverter, error) {
+func New(s client.ScheduleClient, db store.MinimalStore, sa scheduler.ControllablePowerPlant) (*Inverter, error) {
 	return &Inverter{
 		s:  s,
 		pp: sa,

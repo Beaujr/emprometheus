@@ -43,6 +43,7 @@ var (
 	mpc                    = flag.Bool("mpc", false, "use mpc or just rely on forecast")
 	createSchedulesOnStart = flag.Bool("init", true, "create schedules on application start")
 	dsn                    = flag.String("dsn", "", "postgres DSN if using database to store schedules")
+	password               = flag.String("password", "", "password for admin endpoint")
 )
 
 type basicAuthTransport struct {
@@ -57,7 +58,8 @@ func (bat *basicAuthTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 func main() {
 	flag.Parse()
-	ctx := context.Background()
+	sigkillCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
+	defer stop()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	var rateFetcher provider.RateFetcher = func() error {
 		logger.Warn(fmt.Sprintf("rate fetcher is disabled, relying on %s already existing", provider.CSVFileName))
@@ -110,6 +112,10 @@ func main() {
 
 		var c temporalsdk.Client
 		var sch scheduler.Scheduler = &scheduler.DebugScheduler{}
+		sa, err := solarassistant.New(logger.With(slog.String("pkg", "solarassistant")), solarassistant.WithOTEL())
+		if err != nil {
+			panic(err.Error())
+		}
 		if *useTemporal {
 			temporalClient, err := temporal.NewClient(logger.With(slog.String("pkg", "temporal")), *temporalAddress, *temporalNamespace, *temporalTLS)
 			if err != nil {
@@ -121,32 +127,23 @@ func main() {
 			if *createSchedulesOnStart {
 				temporalOpts = append(temporalOpts, temporal.WithInitOnStart())
 			}
-			sa, err := solarassistant.New(logger.With(slog.String("pkg", "solarassistant")), solarassistant.WithOTEL())
-			if err != nil {
-				panic(err.Error())
-			}
-			defer func() {
-				if err = sa.Stop(ctx); err != nil {
-					panic(err.Error())
-				}
-			}()
-			temporalScheduler, err := temporal.New(ctx, logger, c, rateFetcher, sa, *temporalSchedule, *mpc, db, temporalOpts...)
+
+			temporalScheduler, err := temporal.New(sigkillCtx, logger, c, rateFetcher, sa, *temporalSchedule, *mpc, db, temporalOpts...)
 			if err != nil {
 				panic(err.Error())
 			}
 			sch = temporalScheduler
 		}
 
-		srv := s.NewServer(ctx, logger, rateFetcher, querier, *dir, sch, *mpc, db)
-		errGrp, ctx := errgroup.WithContext(ctx)
-		ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
-		defer stop()
+		srv := s.NewServer(sigkillCtx, logger, rateFetcher, querier, *dir, *password, sch, *mpc, db, sa.Process)
+		errGrp, ctx := errgroup.WithContext(sigkillCtx)
 		errGrp.Go(func() error {
 			if err = sch.Start(ctx); err != nil {
 				return err
 			}
 			return nil
 		})
+
 		errGrp.Go(func() error {
 			if err = srv.ListenAndServe(); err != nil {
 				if err = srv.Shutdown(ctx); err != nil {
@@ -158,16 +155,27 @@ func main() {
 			}
 			return nil
 		})
-		// Goroutine to watch for signal
 		errGrp.Go(func() error {
-			<-ctx.Done() // signal received
-			fmt.Println("signal received, shutting down server...")
+			<-sigkillCtx.Done() // signal received
+			logger.Warn("signal received, shutting down server...")
 
 			// Shutdown server with timeout
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			return srv.Shutdown(shutdownCtx) // makes errgroup return error
+			err = srv.Shutdown(shutdownCtx) // makes errgroup return error
+			if err != nil {
+				return err
+			}
+			err = sa.Stop(shutdownCtx)
+			if err != nil {
+				return err
+			}
+			err = srv.Shutdown(shutdownCtx)
+			if err != nil {
+				return err
+			}
+			return nil
 		})
 
 		errGrp.Go(func() error {
