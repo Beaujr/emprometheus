@@ -65,7 +65,7 @@ func (fs *Temporal) Start(ctx context.Context) error {
 	errGrp, ctx := errgroup.WithContext(ctx)
 	interruptCh := worker.InterruptCh()
 	for _, w := range ws {
-		e := worker.New(fs.c, w.queue, worker.Options{})
+		e := worker.New(fs.c, w.queue, worker.Options{WorkerStopTimeout: 5 * time.Second})
 		e.RegisterWorkflow(w.workflow)
 		for _, a := range w.activities {
 			e.RegisterActivity(a)
@@ -104,13 +104,13 @@ func WithInitOnStart() Option {
 	}
 }
 
-func New(ctx context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, sa scheduler.ControllablePowerPlant, cron string, mpc bool, db store.Store, opts ...Option) (*Temporal, error) {
+func New(_ context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, sa scheduler.ControllablePowerPlant, cron string, mpc bool, db store.Store, opts ...Option) (*Temporal, error) {
 	s := c.ScheduleClient()
 	i, err := inverter.New(s, db, sa)
-	f := emhass.New(s, tariffs, sa.GetCurrentSOC, http.Client{Timeout: 60 * time.Second}, db)
 	if err != nil {
 		return nil, err
 	}
+	f := emhass.New(s, tariffs, sa.GetCurrentSOC, http.Client{Timeout: 60 * time.Second}, db)
 	t := &Temporal{
 		logger:  logger,
 		c:       c,
@@ -207,7 +207,6 @@ func (fs *Temporal) setUpMPCWorkflows(ctx context.Context) error {
 func (fs *Temporal) setUpForecastWorkflows(ctx context.Context) error {
 	fs.logger.Info("forecast")
 	scheduleID := emhass.WorkflowId
-	schedule := "1 0 * * *"
 	action := &client.ScheduleWorkflowAction{
 		ID:        scheduleID,
 		Workflow:  fs.f.ForecastWorkflow,
@@ -221,7 +220,7 @@ func (fs *Temporal) setUpForecastWorkflows(ctx context.Context) error {
 	sch, err := fs.s.Create(ctx, client.ScheduleOptions{
 		ID: scheduleID,
 		Spec: client.ScheduleSpec{
-			CronExpressions: []string{schedule},
+			CronExpressions: []string{fs.cron},
 		},
 		Action: action,
 	})
@@ -233,7 +232,7 @@ func (fs *Temporal) setUpForecastWorkflows(ctx context.Context) error {
 		sch = fs.s.GetHandle(ctx, scheduleID)
 		err = sch.Update(ctx, client.ScheduleUpdateOptions{DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 			input.Description.Schedule.Spec = &client.ScheduleSpec{
-				CronExpressions: []string{schedule},
+				CronExpressions: []string{fs.cron},
 			}
 			input.Description.Schedule.Action = action
 			return &client.ScheduleUpdate{
@@ -318,7 +317,7 @@ func (fs *Temporal) process(ctx context.Context, t time.Time, workmodepriority, 
 	return nil
 }
 
-func (fs *Temporal) Run(ctx context.Context, dir, method string) error {
+func (fs *Temporal) Run(ctx context.Context, method string) error {
 	if err := fs.output(ctx, method); err != nil {
 		return err
 	}

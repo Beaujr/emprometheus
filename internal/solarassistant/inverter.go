@@ -168,6 +168,10 @@ func (sa *SolarAssistant) Stop(_ context.Context) error {
 			return err
 		}
 	}
+
+	if sa.client != nil {
+		sa.client.Disconnect(250)
+	}
 	return nil
 }
 

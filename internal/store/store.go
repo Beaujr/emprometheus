@@ -11,20 +11,22 @@ import (
 
 type Find = func(time.Time) (Row, error)
 
-var ErrNotFound = errors.New("Not Found")
+var ErrNotFound = errors.New("not found")
 
 type Store interface {
-	Insert(Row) error
-	Select(start time.Time) ([]Row, error)
-	Upsert(row Row) error
-	InsertOptimization(OptimizationResult) error
-	SelectOptimization(start time.Time, optimization string) ([]OptimizationResult, error)
-	SetActualSoc(socTime time.Time, soc float64) error
-	Find(start time.Time) (Row, error)
+	OptimizationStore
+	MinimalStore
 	Close() error
 }
 
-type ReadOnlyStore interface {
+type OptimizationStore interface {
+	Insert(Row) error
+	Upsert(row Row) error
+	InsertOptimization(OptimizationResult) error
+	SelectOptimization(start time.Time, optimization string) ([]OptimizationResult, error)
+}
+
+type MinimalStore interface {
 	Select(start time.Time) ([]Row, error)
 	Find(start time.Time) (Row, error)
 	SetActualSoc(socTime time.Time, soc float64) error
