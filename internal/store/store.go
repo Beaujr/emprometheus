@@ -237,7 +237,7 @@ func WithPostgresDSN(dsn string) Option {
 func WithDB(db *sql.DB) Option {
 	return func(s *storeConfig) error {
 		s.p = &PostgresStore{db: db}
-		return nil
+		return s.p.migrations()
 	}
 }
 

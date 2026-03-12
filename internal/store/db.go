@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	_ "github.com/lib/pq"
 	"time"
 )
@@ -121,7 +122,25 @@ func (p PostgresStore) migrations() error {
 			return err
 		}
 	}
+	settingsQuery := `
+		SELECT count(*)
+		FROM inverter_settings;
+	`
+	count := 0
+	err := p.db.QueryRow(settingsQuery).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		inserts := []string{StateCurrent, StateTarget}
+		for _, i := range inserts {
+			q := fmt.Sprintf("insert into inverter_settings (soc, device_mode, grid_charge, state) values (10, 'Load First', 'Disabled', '" + i + "');")
+			if _, err := p.db.Exec(q); err != nil {
+				return err
+			}
+		}
 
+	}
 	return nil
 
 }
