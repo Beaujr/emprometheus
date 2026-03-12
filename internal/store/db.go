@@ -1,35 +1,15 @@
 package store
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/prometheus"
 	_ "github.com/lib/pq"
-	"go.opentelemetry.io/otel/attribute"
-	api "go.opentelemetry.io/otel/metric"
-	"log"
 	"time"
 )
-
-var (
-	queryCounter api.Int64Counter
-	meter        api.Meter
-)
-
-func init() {
-	meter = prometheus.GetMeter(meterName)
-	var err error
-	queryCounter, err = meter.Int64Counter("store_exec_count", api.WithDescription("Interactions with store"))
-	if err != nil {
-		log.Fatal(err)
-	}
-}
 
 const (
 	StateCurrent = "current"
 	StateTarget  = "target"
-	meterName    = "github.com/beaujr/emprometheus/internal/store"
 )
 
 type PostgresStore struct {
@@ -88,7 +68,6 @@ ON CONFLICT (optimization, time) DO UPDATE SET
 		r.CostFunProfit,
 		r.OptimStatus,
 	)
-	queryCounter.Add(context.Background(), 1, api.WithAttributes(attribute.Key("action").String("InsertOptimization")))
 	return err
 
 }
@@ -195,7 +174,6 @@ ON CONFLICT (time) DO UPDATE SET
 	if err != nil {
 		return err
 	}
-	queryCounter.Add(context.Background(), 1, api.WithAttributes(attribute.Key("action").String("Insert")))
 	return nil
 }
 
@@ -225,7 +203,6 @@ WHERE time = $1;
 	if err != nil {
 		return Row{}, err
 	}
-	queryCounter.Add(context.Background(), 1, api.WithAttributes(attribute.Key("action").String("Find")))
 	return row, nil
 }
 
@@ -262,7 +239,6 @@ ORDER BY time ASC;
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	queryCounter.Add(context.Background(), 1, api.WithAttributes(attribute.Key("action").String("SelectOptimization")))
 	return result, nil
 }
 
@@ -285,7 +261,6 @@ func (p PostgresStore) SetActualSoc(socTime time.Time, soc float64) error {
 	if rows == 0 {
 		return ErrNotFound
 	}
-	queryCounter.Add(context.Background(), 1, api.WithAttributes(attribute.Key("action").String("SetActualSoc")))
 	return nil
 }
 
@@ -329,7 +304,6 @@ ORDER BY time ASC;
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	queryCounter.Add(context.Background(), 1, api.WithAttributes(attribute.Key("action").String("Select")))
 	return result, nil
 }
 

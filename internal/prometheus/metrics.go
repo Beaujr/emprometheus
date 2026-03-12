@@ -42,3 +42,7 @@ func Serve(logger *slog.Logger) error {
 func GetMeter(name string) api.Meter {
 	return meterProvider.Meter(name)
 }
+
+func GetMeterProvider() api.MeterProvider {
+	return meterProvider
+}
