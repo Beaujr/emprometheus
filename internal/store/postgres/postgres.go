@@ -5,6 +5,8 @@ import (
 	"github.com/XSAM/otelsql"
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	api "go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
+	"os"
 )
 
 var (
@@ -18,7 +20,10 @@ func init() {
 }
 
 func New(dsn string) (*sql.DB, error) {
-	attrs := append(otelsql.AttributesFromDSN(dsn))
+	if err := os.Setenv("OTEL_SEMCONV_STABILITY_OPT_IN", "database/dup"); err != nil {
+		return nil, err
+	}
+	attrs := append(otelsql.AttributesFromDSN(dsn), semconv.DBSystemPostgreSQL)
 
 	db, err := otelsql.Open("postgres", dsn, otelsql.WithAttributes(
 		attrs...,
