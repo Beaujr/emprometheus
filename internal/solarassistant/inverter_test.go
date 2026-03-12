@@ -287,11 +287,21 @@ func TestIntervertCurrentSOCHigherThanTargetSOC(t *testing.T) {
 				t.Fatal(err)
 				return
 			}
-
-			if s.GetCurrentDeviceMode() != tt.expectedWorkModePriority {
+			deviceMode, err := s.GetCurrentDeviceMode()
+			if err != nil {
+				t.Fatal(err)
+				return
+			}
+			if deviceMode != tt.expectedWorkModePriority {
 				t.Fail()
 			}
-			if s.GetCurrentBatteryFirstGridCharge() != tt.expectedBatteryFirstGridCharge {
+
+			batteryFirstGridCharge, err := s.GetCurrentBatteryFirstGridCharge()
+			if err != nil {
+				t.Fatal(err)
+				return
+			}
+			if batteryFirstGridCharge != tt.expectedBatteryFirstGridCharge {
 				t.Fail()
 			}
 		})

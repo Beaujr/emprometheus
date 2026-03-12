@@ -28,11 +28,11 @@ type ControllablePowerPlant interface {
 	GetCurrentSOC() (int64, error)
 	GetTargetSOC() (int64, error)
 	SetCurrentDeviceMode(mode string)
-	GetCurrentDeviceMode() string
-	GetTargetDeviceMode() string
+	GetCurrentDeviceMode() (string, error)
+	GetTargetDeviceMode() (string, error)
 	SetCurrentBatteryFirstGridCharge(gridFirstBatteryCharge string)
-	GetCurrentBatteryFirstGridCharge() string
-	GetTargetBatteryFirstGridCharge() string
+	GetCurrentBatteryFirstGridCharge() (string, error)
+	GetTargetBatteryFirstGridCharge() (string, error)
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
 }

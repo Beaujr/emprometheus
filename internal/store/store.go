@@ -1,9 +1,11 @@
 package store
 
 import (
+	"database/sql"
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/beaujr/emprometheus/internal/store/postgres"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +18,7 @@ var ErrNotFound = errors.New("not found")
 type Store interface {
 	OptimizationStore
 	MinimalStore
+	StateAccessorStore
 	Close() error
 }
 
@@ -30,6 +33,30 @@ type MinimalStore interface {
 	Select(start time.Time) ([]Row, error)
 	Find(start time.Time) (Row, error)
 	SetActualSoc(socTime time.Time, soc float64) error
+}
+
+type StateStore interface {
+	SetSoc(soc int64) error
+	SetDeviceMode(deviceMode string) error
+	SetGridCharge(gridCharge string) error
+	GetSoc() (int64, error)
+	GetDeviceMode() (string, error)
+	GetGridCharge() (string, error)
+}
+
+type StateAccessorStore interface {
+	SetBatteryFirstGridCharge(enabled string) error
+	SetSOC(soc int64) error
+	SetDeviceMode(mode string) error
+	GetBatteryFirstGridCharge() (string, error)
+	GetSOC() (int64, error)
+	GetDeviceMode() (string, error)
+	SetBatteryFirstGridChargeTarget(enabled string) error
+	SetSOCTarget(soc int64) error
+	SetDeviceModeTarget(mode string) error
+	GetBatteryFirstGridChargeTarget() (string, error)
+	GetSOCTarget() (int64, error)
+	GetDeviceModeTarget() (string, error)
 }
 
 type Row struct {
@@ -197,13 +224,19 @@ type storeConfig struct {
 
 type Option = func(s *storeConfig) error
 
-func WithPostgres(dsn string) Option {
+func WithPostgresDSN(dsn string) Option {
 	return func(s *storeConfig) error {
-		p, err := newPostgresStore(dsn)
+		p, err := postgres.New(dsn)
 		if err != nil {
 			return err
 		}
-		s.p = p
+		s.p = &PostgresStore{db: p}
+		return nil
+	}
+}
+func WithDB(db *sql.DB) Option {
+	return func(s *storeConfig) error {
+		s.p = &PostgresStore{db: db}
 		return nil
 	}
 }

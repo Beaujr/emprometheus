@@ -22,6 +22,66 @@ func (f FileStore) SetActualSoc(socTime time.Time, soc float64) error {
 	panic("implement me")
 }
 
+func (f FileStore) SetBatteryFirstGridCharge(enabled string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) SetSOC(soc int64) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) SetDeviceMode(mode string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) GetBatteryFirstGridCharge() (string, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) GetSOC() (int64, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) GetDeviceMode() (string, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) SetBatteryFirstGridChargeTarget(enabled string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) SetSOCTarget(soc int64) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) SetDeviceModeTarget(mode string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) GetBatteryFirstGridChargeTarget() (string, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) GetSOCTarget() (int64, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) GetDeviceModeTarget() (string, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (f FileStore) InsertOptimization(row OptimizationResult) error {
 	return nil
 }

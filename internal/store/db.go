@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+const (
+	StateCurrent = "current"
+	StateTarget  = "target"
+)
+
 type PostgresStore struct {
 	db *sql.DB
 }
@@ -66,21 +71,6 @@ ON CONFLICT (optimization, time) DO UPDATE SET
 
 }
 
-func newPostgresStore(dsn string) (*PostgresStore, error) {
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		return nil, err
-	}
-	if err = db.Ping(); err != nil {
-		return nil, err
-	}
-	p := &PostgresStore{db: db}
-	if err = p.migrations(); err != nil {
-		return nil, err
-	}
-	return p, nil
-}
-
 func (p PostgresStore) migrations() error {
 	var migrations []string
 	createTable := `
@@ -115,7 +105,17 @@ func (p PostgresStore) migrations() error {
 	actualSocColumn := `
 	ALTER TABLE optimization_results
 	ADD COLUMN IF NOT EXISTS a_soc DOUBLE PRECISION NOT NULL DEFAULT 0;`
-	migrations = append(migrations, createOptimizationTable, createTable, actualSocColumn)
+
+	stateTable := `
+	CREATE TABLE IF NOT EXISTS inverter_settings (
+		soc BIGINT NOT NULL,
+		device_mode TEXT NOT NULL,
+		grid_charge TEXT NOT NULL,
+		state TEXT NOT NULL,
+		PRIMARY KEY (state)
+	);
+`
+	migrations = append(migrations, createOptimizationTable, createTable, actualSocColumn, stateTable)
 	for _, migration := range migrations {
 		if _, err := p.db.Exec(migration); err != nil {
 			return err
@@ -297,4 +297,114 @@ func (p PostgresStore) Upsert(row Row) error {
 
 func (p PostgresStore) Close() error {
 	return p.db.Close()
+}
+
+func (p PostgresStore) setField(state, field string, value any) error {
+	query := `
+		UPDATE inverter_settings
+        SET ` + field + ` = $2
+        WHERE state = $1;
+`
+	_, err := p.db.Exec(query, state, value)
+	return err
+}
+
+func (p PostgresStore) getField(state, field string, dest any) error {
+	query := `
+		SELECT ` + field + `
+		FROM inverter_settings
+		WHERE state = $1
+	`
+	return p.db.QueryRow(query, state).Scan(dest)
+}
+
+func (p PostgresStore) SetBatteryFirstGridCharge(enabled string) error {
+	return p.setField(StateCurrent, "grid_charge", enabled)
+}
+
+func (p PostgresStore) SetSOC(soc int64) error {
+	return p.setField(StateCurrent, "soc", soc)
+}
+
+func (p PostgresStore) SetDeviceMode(mode string) error {
+	return p.setField(StateCurrent, "device_mode", mode)
+
+}
+
+func (p PostgresStore) GetBatteryFirstGridCharge() (string, error) {
+	var v string
+	err := p.getField(StateCurrent, "grid_charge", &v)
+	if err != nil {
+		return "", err
+	}
+	return v, err
+}
+
+func (p PostgresStore) GetSOC() (int64, error) {
+	var v int64
+	err := p.getField(StateCurrent, "soc", &v)
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (p PostgresStore) GetDeviceMode() (string, error) {
+	var v string
+	err := p.getField(StateCurrent, "device_mode", &v)
+	if err != nil {
+		return "", err
+	}
+	return v, nil
+}
+
+func (p PostgresStore) SetBatteryFirstGridChargeTarget(enabled string) error {
+	err := p.setField(StateTarget, "grid_charge", enabled)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p PostgresStore) SetSOCTarget(soc int64) error {
+	err := p.setField(StateTarget, "soc", soc)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p PostgresStore) SetDeviceModeTarget(mode string) error {
+	err := p.setField(StateTarget, "device_mode", mode)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p PostgresStore) GetBatteryFirstGridChargeTarget() (string, error) {
+	var v string
+	err := p.getField(StateTarget, "grid_charge", &v)
+	if err != nil {
+		return "", err
+	}
+	return v, err
+}
+
+func (p PostgresStore) GetSOCTarget() (int64, error) {
+	var v int64
+	err := p.getField(StateTarget, "soc", &v)
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func (p PostgresStore) GetDeviceModeTarget() (string, error) {
+	var v string
+	err := p.getField(StateTarget, "device_mode", &v)
+	if err != nil {
+		return "", nil
+	}
+	return v, nil
 }

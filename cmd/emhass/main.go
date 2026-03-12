@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	p "github.com/beaujr/emprometheus/internal/prometheus"
@@ -11,6 +12,7 @@ import (
 	s "github.com/beaujr/emprometheus/internal/server"
 	"github.com/beaujr/emprometheus/internal/solarassistant"
 	"github.com/beaujr/emprometheus/internal/store"
+	"github.com/beaujr/emprometheus/internal/store/postgres"
 	"github.com/beaujr/emprometheus/internal/temporal"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
@@ -55,6 +57,8 @@ func (bat *basicAuthTransport) RoundTrip(req *http.Request) (*http.Response, err
 	req.SetBasicAuth(bat.Username, bat.Password)
 	return bat.Transport.RoundTrip(req)
 }
+
+var psqldb *sql.DB
 
 func main() {
 	flag.Parse()
@@ -102,7 +106,11 @@ func main() {
 		// use filestore by default
 		storeOpts := []store.Option{store.WithFilestore(*dir, provider.CSVScheduleName)}
 		if *dsn != "" {
-			storeOpts = []store.Option{store.WithPostgres(*dsn)}
+			psqldb, err = postgres.New(*dsn)
+			if err != nil {
+				panic(err.Error())
+			}
+			storeOpts = []store.Option{store.WithDB(psqldb)}
 		}
 		db, err := store.New(storeOpts...)
 		if err != nil {
@@ -112,7 +120,11 @@ func main() {
 
 		var c temporalsdk.Client
 		var sch scheduler.Scheduler = &scheduler.DebugScheduler{}
-		sa, err := solarassistant.New(logger.With(slog.String("pkg", "solarassistant")), solarassistant.WithOTEL())
+		saOptions := []solarassistant.Option{solarassistant.WithOTEL()}
+		if *dsn != "" {
+			saOptions = append(saOptions, solarassistant.WithStateHandler(db))
+		}
+		sa, err := solarassistant.New(logger.With(slog.String("pkg", "solarassistant")), saOptions...)
 		if err != nil {
 			panic(err.Error())
 		}
