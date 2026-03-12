@@ -5,14 +5,12 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/store"
 	"go.opentelemetry.io/otel/attribute"
-	p "go.opentelemetry.io/otel/exporters/prometheus"
 	"log/slog"
 
 	"github.com/beaujr/emprometheus/internal/scheduler"
-	"go.opentelemetry.io/otel/sdk/metric"
-
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	api "go.opentelemetry.io/otel/metric"
 	"log"
@@ -30,7 +28,7 @@ const (
 	TopicSOCState                    = "solar_assistant/total/battery_state_of_charge/state"
 	TopicDeviceModeState             = "solar_assistant/inverter_1/device_mode/state"
 	TopicBatteryFirstGridChargeState = "solar_assistant/inverter_1/battery_first_grid_charge/state"
-	meterName                        = "github.com/beaujr/emprometheus"
+	meterName                        = "github.com/beaujr/emprometheus/internal/solarassistant"
 )
 
 var (
@@ -45,15 +43,8 @@ var (
 )
 
 func init() {
-	exporter, err := p.New()
-	if err != nil {
-		log.Fatal(err)
-	}
-	provider := metric.NewMeterProvider(
-		metric.WithReader(exporter),
-	)
-	meter = provider.Meter(meterName)
-
+	meter = prometheus.GetMeter(meterName)
+	var err error
 	stateOfCharge, err = meter.Int64ObservableGauge("soc", api.WithDescription("State of charge"))
 	if err != nil {
 		log.Fatal(err)

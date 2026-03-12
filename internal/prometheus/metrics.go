@@ -2,9 +2,27 @@ package prometheus
 
 import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	p "go.opentelemetry.io/otel/exporters/prometheus"
+	api "go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"log"
 	"log/slog"
 	"net/http"
 )
+
+var (
+	meterProvider *metric.MeterProvider
+)
+
+func init() {
+	e, err := p.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+	meterProvider = metric.NewMeterProvider(
+		metric.WithReader(e),
+	)
+}
 
 func Serve(logger *slog.Logger) error {
 	logger.Info("serving metrics at localhost:2223/metrics")
@@ -19,4 +37,8 @@ func Serve(logger *slog.Logger) error {
 		return err
 	}
 	return nil
+}
+
+func GetMeter(name string) api.Meter {
+	return meterProvider.Meter(name)
 }
