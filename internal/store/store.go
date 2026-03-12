@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/store/postgres"
 	"strconv"
 	"strings"
 	"time"
@@ -224,16 +223,6 @@ type storeConfig struct {
 
 type Option = func(s *storeConfig) error
 
-func WithPostgresDSN(dsn string) Option {
-	return func(s *storeConfig) error {
-		p, err := postgres.New(dsn)
-		if err != nil {
-			return err
-		}
-		s.p = &PostgresStore{db: p}
-		return nil
-	}
-}
 func WithDB(db *sql.DB) Option {
 	return func(s *storeConfig) error {
 		s.p = &PostgresStore{db: db}

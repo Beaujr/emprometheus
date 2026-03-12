@@ -134,7 +134,7 @@ func (p PostgresStore) migrations() error {
 	if count == 0 {
 		inserts := []string{StateCurrent, StateTarget}
 		for _, i := range inserts {
-			q := fmt.Sprintf("insert into inverter_settings (soc, device_mode, grid_charge, state) values (10, 'Load First', 'Disabled', '" + i + "');")
+			q := fmt.Sprintf("insert into inverter_settings (soc, device_mode, grid_charge, state) values (10, 'Load First', 'Disabled', '%s');", i)
 			if _, err := p.db.Exec(q); err != nil {
 				return err
 			}
