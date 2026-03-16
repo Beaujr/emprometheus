@@ -330,6 +330,22 @@ func (sa *SolarAssistant) Stop(_ context.Context) error {
 	return nil
 }
 
+func (sa *SolarAssistant) Status(ctx context.Context) (batteryfirstgridcharge string, workmodepriority string, soc int64, err error) {
+	soc, err = sa.GetTargetSOC()
+	if err != nil {
+		return "", "", 0, err
+	}
+	batteryfirstgridcharge, err = sa.GetTargetBatteryFirstGridCharge()
+	if err != nil {
+		return "", "", 0, err
+	}
+
+	workmodepriority, err = sa.GetTargetDeviceMode()
+	if err != nil {
+		return "", "", 0, err
+	}
+	return batteryfirstgridcharge, workmodepriority, soc, nil
+}
 func (sa *SolarAssistant) Process(ctx context.Context, batteryfirstgridcharge string, workmodepriority string, soc int64) error {
 	defer func() {
 		if r := recover(); r != nil {

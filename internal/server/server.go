@@ -33,11 +33,11 @@ type Server struct {
 	dir       string
 	scheduler scheduler.Scheduler
 	db        store.Store
-	process   scheduler.ProcessFunc
+	spp       scheduler.SimplePowerPlant
 	password  string
 }
 
-func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir, password string, scheduler scheduler.Scheduler, mpc bool, db store.Store, process scheduler.ProcessFunc) *http.Server {
+func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir, password string, scheduler scheduler.Scheduler, mpc bool, db store.Store, plant scheduler.SimplePowerPlant) *http.Server {
 	s := &Server{
 		logger:    logger,
 		r:         r,
@@ -45,7 +45,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 		dir:       dir,
 		scheduler: scheduler,
 		db:        db,
-		process:   process,
+		spp:       plant,
 		password:  password,
 	}
 
@@ -85,6 +85,10 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			w.Write([]byte(err.Error()))
 			return
 		}
+		if resp.StatusCode != http.StatusCreated {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(resp.StatusCode)
 		_, err = io.Copy(w, resp.Body)
 		if err != nil {
@@ -102,7 +106,21 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 
 	var tmpl = template.Must(template.ParseFS(templateFS, "templates/admin.html"))
 	mux.HandleFunc("/admin", func(w http.ResponseWriter, r *http.Request) {
-		_ = tmpl.Execute(w, nil)
+		batteryfirstgridcharge, workmodepriority, soc, err := s.spp.Status(r.Context())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		_ = tmpl.Execute(w, struct {
+			WorkModePriority       string
+			SOC                    int64
+			BatteryFirstGridCharge string
+		}{
+			WorkModePriority:       workmodepriority,
+			SOC:                    soc,
+			BatteryFirstGridCharge: batteryfirstgridcharge,
+		})
 	})
 
 	mux.HandleFunc("/admin/process", func(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +153,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			jsonResponse(false, err.Error())
 			return
 		}
-		if err := s.process(r.Context(), battery, workmode, soc); err != nil {
+		if err := s.spp.Process(r.Context(), battery, workmode, soc); err != nil {
 			jsonResponse(false, err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return

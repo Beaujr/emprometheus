@@ -12,18 +12,22 @@ const (
 	BatteryFirstGridChargeDisabled = "Disabled"
 )
 
-type ProcessFunc func(ctx context.Context, batteryfirstgridcharge string, workmodepriority string, soc int64) error
-
 type Scheduler interface {
 	InitForecastSchedule(ctx context.Context) error
 	Run(ctx context.Context, method string) error
 	Start(ctx context.Context) error
 }
+
+type SimplePowerPlant interface {
+	Status(ctx context.Context) (batteryfirstgridcharge string, workmodepriority string, soc int64, err error)
+	Process(ctx context.Context, batteryfirstgridcharge string, workmodepriority string, soc int64) error
+}
+
 type ControllablePowerPlant interface {
+	SimplePowerPlant
 	SetBatteryFirstGridCharge(enabled string) error
 	SetWorkModePriority(workmode string) error
 	SetLoadFirstStopDischarge(soc int64) error
-	Process(ctx context.Context, batteryfirstgridcharge string, workmodepriority string, soc int64) error
 	SetCurrentSOC(soc int64) error
 	GetCurrentSOC() (int64, error)
 	GetTargetSOC() (int64, error)

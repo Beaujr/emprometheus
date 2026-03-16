@@ -108,19 +108,19 @@
 
         <label>Battery First Grid Charge</label>
         <select name="batteryfirstgridcharge">
-            <option value="Enabled">Enabled</option>
-            <option value="Disabled" selected>Disabled</option>
+            <option value="Enabled" {{if eq .BatteryFirstGridCharge "Enabled"}}selected{{end}}>Enabled</option>
+            <option value="Disabled" {{if eq .BatteryFirstGridCharge "Disabled"}}selected{{end}}>Disabled</option>
         </select>
 
         <label>Work Mode Priority</label>
         <select name="workmodepriority">
-            <option value="Battery first">Battery first</option>
-            <option value="Grid First">Grid First</option>
-            <option value="Load first" selected>Load first</option>
+            <option value="Battery first" {{if eq .WorkModePriority "Battery first"}}selected{{end}}>Battery first</option>
+            <option value="Grid first" {{if eq .WorkModePriority "Grid First"}}selected{{end}}>Grid first</option>
+            <option value="Load first" {{if eq .WorkModePriority "Load first"}}selected{{end}}>Load first</option>
         </select>
 
         <label>SOC</label>
-        <input type="number" name="soc" value="10" required>
+        <input type="number" name="soc" value="{{.SOC}}" required>
 
         <label>Password</label>
         <input type="password" name="password" value="" required>

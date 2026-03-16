@@ -81,7 +81,8 @@ func TestSchedulerGetCommands(t *testing.T) {
 				t.Fail()
 				return
 			}
-			if sch.targetSOC != schedules[idx].SOCOpt {
+
+			if sch.targetSOC != (sch.soc / 100) {
 				t.Fail()
 				return
 			}
@@ -179,6 +180,66 @@ func TestThirtyMinuteSchedule(t *testing.T) {
 						t.Fail()
 					}
 					if sch.chargeBatteryFromGrid != scheduler.BatteryFirstGridChargeEnabled {
+						t.Fail()
+					}
+				}
+				break
+			}
+		}
+	}
+}
+func TestHigherSOCInNextRowSchedule(t *testing.T) {
+	minUnitLoadCost := 1.0
+	maxUnitLoadCost := 10.0
+	now := time.Now()
+	schedules := []store.OptimizationResult{
+		{
+			Time:         getNextThirtyMinuteSlot(now, 1, 0),
+			SOCOpt:       0.1,
+			UnitLoadCost: maxUnitLoadCost,
+		},
+		{
+			Time:         getNextThirtyMinuteSlot(now, 1, 30),
+			SOCOpt:       0.1,
+			UnitLoadCost: minUnitLoadCost,
+		},
+		{
+			Time:         getNextThirtyMinuteSlot(now, 2, 00),
+			SOCOpt:       1.0,
+			UnitLoadCost: maxUnitLoadCost,
+		},
+	}
+	schs := GetCommands(schedules)
+	if schs == nil {
+		t.Fail()
+		return
+	}
+
+	if len(schedules) != len(schs) {
+		t.Fail()
+		return
+	}
+	t.Log("Optimization,time,Work Mode, Grid Charge, Stop Discharge at SOC, Target SOC")
+	for _, sch := range schs {
+		r := store.Row{
+			Optimization:     "test",
+			Time:             sch.time,
+			WorkMode:         sch.workmode,
+			GridCharge:       sch.chargeBatteryFromGrid,
+			StopDischargeSOC: sch.soc,
+			TargetSOC:        sch.targetSOC,
+		}
+		t.Log(r.String())
+		for idx, result := range schedules {
+			if sch.time.Equal(result.Time) {
+				if result.UnitLoadCost == minUnitLoadCost {
+					if sch.workmode != scheduler.WorkModeBatteryFirst {
+						t.Fail()
+					}
+					if sch.chargeBatteryFromGrid != scheduler.BatteryFirstGridChargeEnabled {
+						t.Fail()
+					}
+					if sch.soc != (schedules[idx+1].SOCOpt * 100) {
 						t.Fail()
 					}
 				}

@@ -147,7 +147,7 @@ func main() {
 			sch = temporalScheduler
 		}
 
-		srv := s.NewServer(sigkillCtx, logger, rateFetcher, querier, *dir, *password, sch, *mpc, db, sa.Process)
+		srv := s.NewServer(sigkillCtx, logger, rateFetcher, querier, *dir, *password, sch, *mpc, db, sa)
 		errGrp, ctx := errgroup.WithContext(sigkillCtx)
 		errGrp.Go(func() error {
 			if err = sch.Start(ctx); err != nil {

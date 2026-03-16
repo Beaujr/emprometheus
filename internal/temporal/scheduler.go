@@ -448,27 +448,39 @@ func GetCommands(rows []store.OptimizationResult) []Schedule {
 		workMode := scheduler.WorkModeLoadFirst
 		gridCharge := scheduler.BatteryFirstGridChargeDisabled
 		soc := 10.0 // default load-first SoC
-
+		targetSOCFromOptimisation := row.SOCOpt
 		if row.UnitLoadCost == minPrice {
 			// Inside cheap block
 			workMode = scheduler.WorkModeBatteryFirst
 			gridCharge = scheduler.BatteryFirstGridChargeEnabled
 			tSoc := monotonicSOC[i]
+			// if its not the last index
+			if i != len(rows)-1 {
+				// if the next row is higher than this row
+				// set the target soc of this hour to reach that target soc
+				// rows are the bottom of the hour eg 16:00:00 70% soc, so 15:00:00 should set target soc to 70%
+				nextRowSocOpt := rows[i+1].SOCOpt * 100
+				//nextRowUnitLoadCost := rows[i+1].UnitLoadCost
+				if nextRowSocOpt > tSoc {
+					tSoc = nextRowSocOpt
+				}
+			}
 			// if its equal to 10, which is the minimum, then no point setting charge vars
 			if tSoc == soc {
 				workMode = scheduler.WorkModeLoadFirst
 				gridCharge = scheduler.BatteryFirstGridChargeDisabled
 			}
 			soc = tSoc // ← monotonic enforced target
-
 		}
-
+		if workMode == scheduler.WorkModeBatteryFirst {
+			targetSOCFromOptimisation = soc / 100
+		}
 		commands = append(commands, Schedule{
 			time:                  row.Time,
 			workmode:              workMode,
 			soc:                   soc,
 			chargeBatteryFromGrid: gridCharge,
-			targetSOC:             row.SOCOpt,
+			targetSOC:             targetSOCFromOptimisation,
 		})
 	}
 

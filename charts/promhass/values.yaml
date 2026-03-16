@@ -69,6 +69,16 @@ ingress:
         - path: /
           pathType: Prefix
           port: 5000
+    - host: emprometheus
+      paths:
+        - path: /schedule
+          pathType: Prefix
+          port: 8123
+    - host: emprometheus
+      paths:
+        - path: /process
+          pathType: Prefix
+          port: 8123
   tls:
     - hosts:
         - emprometheus
@@ -214,7 +224,7 @@ config: |-
     "load_peak_hours_cost": 0.1907,
     "load_offpeak_hours_cost": 0.15,
     "production_price_forecast_method": "constant",
-    "photovoltaic_production_sell_price": 0.15,
+    "photovoltaic_production_sell_price": 0.12,
     "maximum_power_from_grid": 9000,
     "maximum_power_to_grid": 9000,
     "set_use_pv": true,
