@@ -67,4 +67,4 @@ jobs:
           KUBECONF: ${{ secrets.KUBECONF }}
         run: mkdir -p ~/.kube/ && echo $KUBECONF  | base64 -d > ~/.kube/config
       - name: Deploy
-        run: helm upgrade --install promhass charts/promhass -f charts/values/cloud.yaml
+        run: helm upgrade --install promhass charts/promhass --set promhass_image.tag=$(git rev-parse --short HEAD) -f charts/values/cloud.yaml

@@ -51,6 +51,10 @@ docker_manifests:
     image_templates:
       - "containers.whickerx.info/emhass:latest-amd64"
       - "containers.whickerx.info/emhass:latest-arm64"
+  - name_template: "containers.whickerx.info/emhass:{{ .ShortCommit }}"
+    image_templates:
+      - "containers.whickerx.info/emhass:latest-amd64"
+      - "containers.whickerx.info/emhass:latest-arm64"
 checksum:
   name_template: "checksums.txt"
 
