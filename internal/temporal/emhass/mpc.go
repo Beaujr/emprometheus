@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/provider"
-	"github.com/beaujr/emprometheus/internal/store"
-	"go.temporal.io/sdk/temporal"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/provider"
+	"github.com/beaujr/emprometheus/internal/store"
+	"go.temporal.io/sdk/temporal"
 
 	"go.temporal.io/sdk/workflow"
 )
@@ -110,7 +111,7 @@ func (f *Forecaster) MPCActivity(ctx context.Context, emhassUrl string, currentS
 			return
 		}
 	}()
-	if err := f.tariff(); err != nil {
+	if err := f.tariff(f.steps); err != nil {
 		return 0, err
 	}
 

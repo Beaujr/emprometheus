@@ -105,13 +105,13 @@ func WithInitOnStart() Option {
 	}
 }
 
-func New(_ context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, sa scheduler.ControllablePowerPlant, cron string, mpc bool, db store.Store, loc *time.Location, opts ...Option) (*Temporal, error) {
+func New(_ context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, sa scheduler.ControllablePowerPlant, cron string, mpc bool, db store.Store, loc *time.Location, steps int, opts ...Option) (*Temporal, error) {
 	s := c.ScheduleClient()
 	i, err := inverter.New(s, db, sa)
 	if err != nil {
 		return nil, err
 	}
-	f := emhass.New(s, tariffs, sa.GetCurrentSOC, http.Client{Timeout: 60 * time.Second}, db)
+	f := emhass.New(s, tariffs, sa.GetCurrentSOC, http.Client{Timeout: 60 * time.Second}, db, steps)
 	t := &Temporal{
 		logger:  logger,
 		c:       c,

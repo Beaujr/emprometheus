@@ -49,6 +49,7 @@ var (
 	dsn                    = flag.String("dsn", "", "postgres DSN if using database to store schedules")
 	password               = flag.String("password", "", "password for admin endpoint")
 	timezone               = flag.String("timezone", "Europe/London", "time zone")
+	steps                  = flag.Int("steps", 144, "number of steps to generate")
 )
 
 type basicAuthTransport struct {
@@ -68,7 +69,7 @@ func main() {
 	sigkillCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
 	defer stop()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	var rateFetcher provider.RateFetcher = func() error {
+	var rateFetcher provider.RateFetcher = func(steps int) error {
 		logger.Warn(fmt.Sprintf("rate fetcher is disabled, relying on %s already existing", provider.CSVFileName))
 		// dont modify any files and rely on external file creating data_load_cost_forecast.csv
 		return nil
@@ -83,7 +84,7 @@ func main() {
 			o := octopus.New(*octopusProduct, *octopusTariff, *dir, loc)
 			rateFetcher = o.GenerateOctopusTariff
 		}
-		if err := rateFetcher(); err != nil {
+		if err = rateFetcher(*steps); err != nil {
 			logger.Warn("failed to fetch rates on start up", slog.String("error", err.Error()))
 		}
 	}
@@ -148,14 +149,14 @@ func main() {
 				temporalOpts = append(temporalOpts, temporal.WithInitOnStart())
 			}
 
-			temporalScheduler, err := temporal.New(sigkillCtx, logger, c, rateFetcher, sa, *temporalSchedule, *mpc, db, loc, temporalOpts...)
+			temporalScheduler, err := temporal.New(sigkillCtx, logger, c, rateFetcher, sa, *temporalSchedule, *mpc, db, loc, *steps, temporalOpts...)
 			if err != nil {
 				panic(err.Error())
 			}
 			sch = temporalScheduler
 		}
 
-		srv := s.NewServer(sigkillCtx, logger, rateFetcher, querier, *dir, *password, sch, loc, db, sa)
+		srv := s.NewServer(sigkillCtx, logger, rateFetcher, querier, *dir, *password, sch, loc, db, sa, *steps)
 		errGrp, ctx := errgroup.WithContext(sigkillCtx)
 		errGrp.Go(func() error {
 			if err = sch.Start(ctx); err != nil {

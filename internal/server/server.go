@@ -36,9 +36,10 @@ type Server struct {
 	db        store.Store
 	spp       scheduler.SimplePowerPlant
 	password  string
+	steps     int
 }
 
-func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir, password string, scheduler scheduler.Scheduler, loc *time.Location, db store.Store, plant scheduler.SimplePowerPlant) *http.Server {
+func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir, password string, scheduler scheduler.Scheduler, loc *time.Location, db store.Store, plant scheduler.SimplePowerPlant, steps int) *http.Server {
 	s := &Server{
 		logger:    logger,
 		r:         r,
@@ -48,6 +49,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 		db:        db,
 		spp:       plant,
 		password:  password,
+		steps:     steps,
 	}
 
 	mux := http.NewServeMux()
@@ -189,7 +191,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 		s.logger.Info(r.URL.Path)
 	})
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
-		if err := s.tariff(); err != nil {
+		if err := s.tariff(steps); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

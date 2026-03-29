@@ -44,7 +44,7 @@ func New(product, tariff, dir string, loc *time.Location) *Octopus {
 	}
 }
 
-func (o *Octopus) GenerateOctopusTariff() error {
+func (o *Octopus) GenerateOctopusTariff(steps int) error {
 	client := http.Client{Timeout: 180 * time.Second}
 	url := fmt.Sprintf("https://api.octopus.energy/v1/products/%s/electricity-tariffs/%s/standard-unit-rates/?page_size=100", o.product, o.tariff)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -78,7 +78,6 @@ func (o *Octopus) GenerateOctopusTariff() error {
 		}
 	}()
 	now := time.Now()
-	steps := 24
 	start := now.Truncate(time.Hour).Add(time.Hour)
 
 	t := start

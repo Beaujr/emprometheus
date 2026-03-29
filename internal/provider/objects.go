@@ -14,4 +14,4 @@ const (
 
 var TariffNotAvailable = errors.New("future tariff not available")
 
-type RateFetcher = func() error
+type RateFetcher = func(steps int) error

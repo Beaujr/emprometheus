@@ -5,13 +5,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/store"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
-	"net/http"
-	"strings"
-	"time"
 
 	"go.temporal.io/sdk/workflow"
 )
@@ -34,10 +35,11 @@ type Forecaster struct {
 	c       http.Client
 	horizon int64
 	db      store.MinimalStore
+	steps   int
 }
 
-func New(s client.ScheduleClient, tariff provider.RateFetcher, getSoc func() (int64, error), c http.Client, db store.Store) *Forecaster {
-	return &Forecaster{tariff: tariff, s: s, getSoc: getSoc, c: c, horizon: 6, db: db}
+func New(s client.ScheduleClient, tariff provider.RateFetcher, getSoc func() (int64, error), c http.Client, db store.Store, steps int) *Forecaster {
+	return &Forecaster{tariff: tariff, s: s, getSoc: getSoc, c: c, horizon: 6, db: db, steps: steps}
 }
 
 func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emhassUrl, emprometheusUrl string) (string, error) {
@@ -76,7 +78,7 @@ func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emhassUrl, emprometh
 }
 
 func (f *Forecaster) ForecastActivity(ctx context.Context, emhassUrl string) (int, error) {
-	if err := f.tariff(); err != nil {
+	if err := f.tariff(f.steps); err != nil {
 		return 0, err
 	}
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/action/%s", emhassUrl, provider.ActionForecast), strings.NewReader("{\"publish_prefix\":\"dh_\"}"))

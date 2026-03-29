@@ -144,7 +144,7 @@ config: |-
   {
     "logging_level": "INFO",
     "costfun": "cost",
-    "optimization_time_step": 60,
+    "optimization_time_step": 10,
     "historic_days_to_retrieve": 9,
     "method_ts_round": "last",
     "continual_publish": false,
