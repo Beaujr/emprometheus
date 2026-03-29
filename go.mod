@@ -1,8 +1,6 @@
 module github.com/beaujr/emprometheus
 
-go 1.24.0
-
-toolchain go1.24.1
+go 1.26.1
 
 require (
 	github.com/XSAM/otelsql v0.41.0

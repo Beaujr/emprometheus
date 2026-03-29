@@ -5,7 +5,6 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/provider"
 	"io"
 	"net/http"
 	"os"
@@ -13,6 +12,9 @@ import (
 	"slices"
 	"strings"
 	"time"
+	_ "time/tzdata"
+
+	"github.com/beaujr/emprometheus/internal/provider"
 )
 
 type Results struct {
@@ -30,14 +32,15 @@ type Result struct {
 }
 
 type Octopus struct {
-	dir, product, tariff string
+	dir, product, tariff, timezone string
 }
 
-func New(product, tariff, dir string) *Octopus {
+func New(product, tariff, dir, timezone string) *Octopus {
 	return &Octopus{
-		dir:     dir,
-		product: product,
-		tariff:  tariff,
+		dir:      dir,
+		product:  product,
+		tariff:   tariff,
+		timezone: timezone,
 	}
 }
 
@@ -77,6 +80,10 @@ func (o *Octopus) GenerateOctopusTariff() error {
 	now := time.Now()
 	steps := 24
 	start := now.Truncate(time.Hour).Add(time.Hour)
+	loc, err := time.LoadLocation(o.timezone)
+	if err != nil {
+		return err
+	}
 
 	t := start
 	var contents [][]byte
@@ -84,7 +91,7 @@ func (o *Octopus) GenerateOctopusTariff() error {
 		for _, row := range r.Results {
 			if (row.ValidFrom.Before(t) || row.ValidFrom.Equal(t)) && row.ValidTo.After(t) {
 				// Print CSV line
-				line := fmt.Sprintf("%s,%.4f\n", t.Local().Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
+				line := fmt.Sprintf("%s,%.4f\n", t.In(loc).Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
 				contents = append(contents, []byte(line))
 			}
 		}
@@ -96,13 +103,13 @@ func (o *Octopus) GenerateOctopusTariff() error {
 		// todo fix later, but useful for debug now
 		switch {
 		case o.product == "COSY-FIX-12M-25-09-24" && o.tariff == "E-1R-COSY-FIX-12M-25-09-24-N":
-			return produceOctopusCosyTariff(o.dir)
+			return o.produceOctopusCosyTariff()
 		case strings.HasPrefix(o.product, "AGILE"):
 			t = time.Now()
 			for _, row := range r.Results {
 				if row.ValidFrom.Before(t) && row.ValidFrom.After(t.AddDate(0, 0, -1)) {
 					// Print CSV line
-					line := fmt.Sprintf("%s,%.4f\n", t.Local().Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
+					line := fmt.Sprintf("%s,%.4f\n", t.In(loc).Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
 					contents = append(contents, []byte(line))
 				}
 			}
@@ -119,9 +126,9 @@ func (o *Octopus) GenerateOctopusTariff() error {
 }
 
 // todo: remove this, exists as manual fix for debugging
-func produceOctopusCosyTariff(dir string) error {
+func (o *Octopus) produceOctopusCosyTariff() error {
 	// open output file
-	fo, err := os.Create(filepath.Join(dir, provider.CSVFileName))
+	fo, err := os.Create(filepath.Join(o.dir, provider.CSVFileName))
 	if err != nil {
 		return err
 	}
@@ -150,8 +157,11 @@ func produceOctopusCosyTariff(dir string) error {
 	// Peak window (16:00–19:00)
 	peakStart := 16
 	peakEnd := 19
-
-	now := time.Now().Local()
+	loc, err := time.LoadLocation(o.timezone)
+	if err != nil {
+		return err
+	}
+	now := time.Now().In(loc)
 	start := now.Truncate(time.Hour).Add(time.Hour)
 
 	steps := 24
@@ -177,7 +187,7 @@ func produceOctopusCosyTariff(dir string) error {
 		}
 
 		// Print CSV line
-		line := fmt.Sprintf("%s,%.4f\n", t.Local().Format("2006-01-02 15:04:05-07:00"), rate)
+		line := fmt.Sprintf("%s,%.4f\n", t.In(loc).Format("2006-01-02 15:04:05-07:00"), rate)
 		if _, err = fo.Write([]byte(line)); err != nil {
 			return err
 		}

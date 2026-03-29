@@ -5,6 +5,14 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"log"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	p "github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/provider/octopus"
@@ -18,13 +26,6 @@ import (
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	temporalsdk "go.temporal.io/sdk/client"
 	"golang.org/x/sync/errgroup"
-	"log"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 var (
@@ -46,6 +47,7 @@ var (
 	createSchedulesOnStart = flag.Bool("init", true, "create schedules on application start")
 	dsn                    = flag.String("dsn", "", "postgres DSN if using database to store schedules")
 	password               = flag.String("password", "", "password for admin endpoint")
+	timezone               = flag.String("timezone", "Europe/London", "time zone")
 )
 
 type basicAuthTransport struct {
@@ -72,11 +74,11 @@ func main() {
 	}
 	if *tariff {
 		if *octopusProduct != "" {
-			o := octopus.New(*octopusProduct, *octopusTariff, *dir)
+			o := octopus.New(*octopusProduct, *octopusTariff, *dir, *timezone)
 			rateFetcher = o.GenerateOctopusTariff
 		}
 		if err := rateFetcher(); err != nil {
-			logger.Warn("failed to fetch rates on start up")
+			logger.Warn("failed to fetch rates on start up", slog.String("error", err.Error()))
 		}
 	}
 	if *process {
