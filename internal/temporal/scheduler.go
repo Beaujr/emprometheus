@@ -5,6 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"slices"
+	"strings"
+	"time"
+
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/store"
@@ -16,12 +22,6 @@ import (
 	temporal2 "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"golang.org/x/sync/errgroup"
-	"log/slog"
-	"net/http"
-	"slices"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type Temporal struct {
@@ -32,6 +32,7 @@ type Temporal struct {
 	f           *emhass.Forecaster
 	tariffs     provider.RateFetcher
 	db          store.Store
+	loc         *time.Location
 	cron        string
 	mpc         bool
 	initOnStart bool
@@ -104,7 +105,7 @@ func WithInitOnStart() Option {
 	}
 }
 
-func New(_ context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, sa scheduler.ControllablePowerPlant, cron string, mpc bool, db store.Store, opts ...Option) (*Temporal, error) {
+func New(_ context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, sa scheduler.ControllablePowerPlant, cron string, mpc bool, db store.Store, loc *time.Location, opts ...Option) (*Temporal, error) {
 	s := c.ScheduleClient()
 	i, err := inverter.New(s, db, sa)
 	if err != nil {
@@ -121,6 +122,7 @@ func New(_ context.Context, logger *slog.Logger, c client.Client, tariffs provid
 		tariffs: tariffs,
 		mpc:     mpc,
 		db:      db,
+		loc:     loc,
 	}
 	for _, opt := range opts {
 		opt(t)
@@ -259,7 +261,7 @@ func (fs *Temporal) process(ctx context.Context, t time.Time, workmodepriority, 
 		ID:        fmt.Sprintf("%s-%s", inverter.WorkflowId, uuid.New()),
 		Workflow:  fs.i.Workflow,
 		TaskQueue: inverter.TaskQueue,
-		Args:      []interface{}{scheduleID, workmodepriority, batteryfirstgridcharge, soc, t.Format(time.RFC3339)},
+		Args:      []interface{}{scheduleID, workmodepriority, batteryfirstgridcharge, soc, t.In(fs.loc).Format(time.RFC3339)},
 		Memo:      map[string]interface{}{"Work Mode Priority": workmodepriority, "Battery First Grid Charge": batteryfirstgridcharge, "SOC": soc, "timestamp": t.Format(time.RFC3339)},
 	}
 	_, err := fs.s.Create(ctx, client.ScheduleOptions{
@@ -494,9 +496,4 @@ type Row struct {
 	PBatt     float64
 	SOC       float64
 	Price     float64
-}
-
-func parseFloat(s string) float64 {
-	v, _ := strconv.ParseFloat(s, 64)
-	return v
 }

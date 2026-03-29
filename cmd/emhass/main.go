@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 
 	p "github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
@@ -72,9 +73,14 @@ func main() {
 		// dont modify any files and rely on external file creating data_load_cost_forecast.csv
 		return nil
 	}
+	loc, err := time.LoadLocation(*timezone)
+	if err != nil {
+		logger.Error(err.Error())
+		panic(err)
+	}
 	if *tariff {
 		if *octopusProduct != "" {
-			o := octopus.New(*octopusProduct, *octopusTariff, *dir, *timezone)
+			o := octopus.New(*octopusProduct, *octopusTariff, *dir, loc)
 			rateFetcher = o.GenerateOctopusTariff
 		}
 		if err := rateFetcher(); err != nil {
@@ -142,7 +148,7 @@ func main() {
 				temporalOpts = append(temporalOpts, temporal.WithInitOnStart())
 			}
 
-			temporalScheduler, err := temporal.New(sigkillCtx, logger, c, rateFetcher, sa, *temporalSchedule, *mpc, db, temporalOpts...)
+			temporalScheduler, err := temporal.New(sigkillCtx, logger, c, rateFetcher, sa, *temporalSchedule, *mpc, db, loc, temporalOpts...)
 			if err != nil {
 				panic(err.Error())
 			}

@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	_ "time/tzdata"
 
 	"github.com/beaujr/emprometheus/internal/provider"
 )
@@ -32,15 +31,16 @@ type Result struct {
 }
 
 type Octopus struct {
-	dir, product, tariff, timezone string
+	dir, product, tariff string
+	loc                  *time.Location
 }
 
-func New(product, tariff, dir, timezone string) *Octopus {
+func New(product, tariff, dir string, loc *time.Location) *Octopus {
 	return &Octopus{
-		dir:      dir,
-		product:  product,
-		tariff:   tariff,
-		timezone: timezone,
+		dir:     dir,
+		product: product,
+		tariff:  tariff,
+		loc:     loc,
 	}
 }
 
@@ -80,10 +80,6 @@ func (o *Octopus) GenerateOctopusTariff() error {
 	now := time.Now()
 	steps := 24
 	start := now.Truncate(time.Hour).Add(time.Hour)
-	loc, err := time.LoadLocation(o.timezone)
-	if err != nil {
-		return err
-	}
 
 	t := start
 	var contents [][]byte
@@ -91,7 +87,7 @@ func (o *Octopus) GenerateOctopusTariff() error {
 		for _, row := range r.Results {
 			if (row.ValidFrom.Before(t) || row.ValidFrom.Equal(t)) && row.ValidTo.After(t) {
 				// Print CSV line
-				line := fmt.Sprintf("%s,%.4f\n", t.In(loc).Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
+				line := fmt.Sprintf("%s,%.4f\n", t.In(o.loc).Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
 				contents = append(contents, []byte(line))
 			}
 		}
@@ -109,7 +105,7 @@ func (o *Octopus) GenerateOctopusTariff() error {
 			for _, row := range r.Results {
 				if row.ValidFrom.Before(t) && row.ValidFrom.After(t.AddDate(0, 0, -1)) {
 					// Print CSV line
-					line := fmt.Sprintf("%s,%.4f\n", t.In(loc).Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
+					line := fmt.Sprintf("%s,%.4f\n", t.In(o.loc).Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
 					contents = append(contents, []byte(line))
 				}
 			}
@@ -157,11 +153,8 @@ func (o *Octopus) produceOctopusCosyTariff() error {
 	// Peak window (16:00–19:00)
 	peakStart := 16
 	peakEnd := 19
-	loc, err := time.LoadLocation(o.timezone)
-	if err != nil {
-		return err
-	}
-	now := time.Now().In(loc)
+
+	now := time.Now().In(o.loc)
 	start := now.Truncate(time.Hour).Add(time.Hour)
 
 	steps := 24
@@ -187,7 +180,7 @@ func (o *Octopus) produceOctopusCosyTariff() error {
 		}
 
 		// Print CSV line
-		line := fmt.Sprintf("%s,%.4f\n", t.In(loc).Format("2006-01-02 15:04:05-07:00"), rate)
+		line := fmt.Sprintf("%s,%.4f\n", t.In(o.loc).Format("2006-01-02 15:04:05-07:00"), rate)
 		if _, err = fo.Write([]byte(line)); err != nil {
 			return err
 		}
