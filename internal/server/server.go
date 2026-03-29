@@ -7,11 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/prometheus"
-	"github.com/beaujr/emprometheus/internal/provider"
-	"github.com/beaujr/emprometheus/internal/scheduler"
-	"github.com/beaujr/emprometheus/internal/store"
-	"github.com/prometheus/common/model"
 	"html/template"
 	"io"
 	"log/slog"
@@ -21,6 +16,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/prometheus"
+	"github.com/beaujr/emprometheus/internal/provider"
+	"github.com/beaujr/emprometheus/internal/scheduler"
+	"github.com/beaujr/emprometheus/internal/store"
+	"github.com/prometheus/common/model"
 )
 
 //go:embed templates/*.html
@@ -37,7 +38,7 @@ type Server struct {
 	password  string
 }
 
-func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir, password string, scheduler scheduler.Scheduler, mpc bool, db store.Store, plant scheduler.SimplePowerPlant) *http.Server {
+func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFetcher, r prometheus.Reporter, dir, password string, scheduler scheduler.Scheduler, loc *time.Location, db store.Store, plant scheduler.SimplePowerPlant) *http.Server {
 	s := &Server{
 		logger:    logger,
 		r:         r,
@@ -177,7 +178,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			return
 		}
 		for _, row := range rows {
-			if _, err = w.Write([]byte(row.String() + "\n")); err != nil {
+			if _, err = w.Write([]byte(row.StringWithTimezone(loc) + "\n")); err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}

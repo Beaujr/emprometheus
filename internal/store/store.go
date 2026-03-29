@@ -184,6 +184,10 @@ func (r Row) String() string {
 	return fmt.Sprintf("%s,%s,%s,%s,%.2f,%.2f", r.Optimization, r.Time.Format(time.RFC3339), r.WorkMode, r.GridCharge, r.StopDischargeSOC, r.TargetSOC)
 }
 
+func (r Row) StringWithTimezone(loc *time.Location) string {
+	return fmt.Sprintf("%s,%s,%s,%s,%.2f,%.2f", r.Optimization, r.Time.In(loc).Format(time.RFC3339), r.WorkMode, r.GridCharge, r.StopDischargeSOC, r.TargetSOC)
+}
+
 func RowFromString(line string) (Row, error) {
 	r := Row{}
 	csvreader := csv.NewReader(strings.NewReader(line))
