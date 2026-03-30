@@ -36,6 +36,7 @@ spec:
           imagePullPolicy: {{ .Values.promhass_image.pullPolicy }}
           args:
             - --server
+            - --steps={{.Values.steps}}
           {{- with .Values.promhass.args }}
             {{ toYaml . | nindent 12 }}
           {{- end }}

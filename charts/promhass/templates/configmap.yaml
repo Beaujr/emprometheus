@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "promhass.labels" . | nindent 4 }}
 data:
-  config.json:
-  {{ .Values.config | toYaml | indent 4}}
+  config.json: |-
+  {{ merge .Values.config (dict "optimization_time_step"  (div 1440 .Values.steps) ) | toJson | indent 4 }}
   secrets.yaml:
   {{ .Values.secrets | toYaml | indent 4 }}

@@ -7,6 +7,9 @@ replicaCount: 1
 promhass:
   args: []
 
+# the amount of steps in a 24 hour day, 24 = 60 in emhass, 48 = 30
+steps: 24
+
 promhass_image:
   repository: emhass
   pullPolicy: IfNotPresent
