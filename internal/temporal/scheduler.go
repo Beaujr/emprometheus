@@ -156,6 +156,18 @@ func (fs *Temporal) InitForecastSchedule(ctx context.Context) error {
 					continue
 				}
 			}
+			if strings.HasPrefix(next.ID, emhass.WorkflowId) {
+				if err = fs.s.GetHandle(ctx, next.ID).Delete(ctx); err != nil {
+					fs.logger.Warn(err.Error())
+					continue
+				}
+			}
+			if strings.HasPrefix(next.ID, inverter.WorkflowId) {
+				if err = fs.s.GetHandle(ctx, next.ID).Delete(ctx); err != nil {
+					fs.logger.Warn(err.Error())
+					continue
+				}
+			}
 		}
 	}
 	if err := fs.setUpForecastWorkflows(ctx); err != nil {
