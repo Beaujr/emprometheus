@@ -24,8 +24,10 @@ type Store interface {
 type OptimizationStore interface {
 	Insert(Row) error
 	Upsert(row Row) error
+	Delete(row Row) error
 	InsertOptimization(OptimizationResult) error
 	SelectOptimization(start time.Time, optimization string) ([]OptimizationResult, error)
+	DeleteAnyOptimization(start time.Time) error
 }
 
 type MinimalStore interface {

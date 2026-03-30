@@ -12,6 +12,16 @@ type FileStore struct {
 	filepath string
 }
 
+func (f FileStore) Delete(row Row) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) DeleteAnyOptimization(start time.Time) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (f FileStore) SelectOptimization(start time.Time, optimization string) ([]OptimizationResult, error) {
 	//TODO implement me
 	panic("implement me")

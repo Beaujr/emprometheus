@@ -3,8 +3,9 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	_ "github.com/lib/pq"
 	"time"
+
+	_ "github.com/lib/pq"
 )
 
 const (
@@ -14,6 +15,28 @@ const (
 
 type PostgresStore struct {
 	db *sql.DB
+}
+
+func (p PostgresStore) Delete(row Row) error {
+	query := `
+delete from schedule where time = $1;
+`
+	_, err := p.db.Exec(
+		query,
+		row.Time,
+	)
+	return err
+}
+
+func (p PostgresStore) DeleteAnyOptimization(start time.Time) error {
+	query := `
+delete from optimization_results where time = $1;
+`
+	_, err := p.db.Exec(
+		query,
+		start,
+	)
+	return err
 }
 
 func (p PostgresStore) InsertOptimization(r OptimizationResult) error {

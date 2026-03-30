@@ -170,6 +170,18 @@ func (fs *Temporal) InitForecastSchedule(ctx context.Context) error {
 			}
 		}
 	}
+	optimizations, err := fs.db.Select(time.Now())
+	if err != nil {
+		return err
+	}
+	for _, optim := range optimizations {
+		if err = fs.db.DeleteAnyOptimization(optim.Time); err != nil {
+			return err
+		}
+		if err = fs.db.Delete(optim); err != nil {
+			return err
+		}
+	}
 	if err := fs.setUpForecastWorkflows(ctx); err != nil {
 		return err
 	}
