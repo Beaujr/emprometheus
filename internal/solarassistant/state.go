@@ -67,9 +67,12 @@ func (h *stateHandler) SetLoadFirstStopDischarge(soc int64) error {
 	if err != nil {
 		return err
 	}
-	if soc != current && h.parent != nil {
-		if err = h.parent.SetLoadFirstStopDischarge(soc); err != nil {
-			return err
+	if soc != current {
+		if h.parent != nil {
+			if err = h.parent.SetLoadFirstStopDischarge(soc); err != nil {
+				return err
+			}
+
 		}
 		if err = h.state.SetLoadFirstStopDischarge(soc); err != nil {
 			return err

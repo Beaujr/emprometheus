@@ -204,20 +204,19 @@ func (sa *SolarAssistant) SetLoadFirstStopDischarge(soc int64) error {
 	logger := sa.logger.With(slog.Int64("want", soc))
 applied:
 	for {
+		loadFirstStopDischarge, err := sa.stateHandler.GetLoadFirstStopDischarge()
+		if err != nil {
+			return err
+		}
+
+		if loadFirstStopDischarge == soc {
+			logger.Info("applied", slog.Duration("seconds", time.Since(start)))
+			break applied
+		}
 		select {
 		case <-timeout:
 			return fmt.Errorf("timeout waiting for LoadFirstStopDischarge to become %d", soc)
-
 		case <-ticker.C:
-			loadFirstStopDischarge, err := sa.stateHandler.GetLoadFirstStopDischarge()
-			if err != nil {
-				return err
-			}
-
-			if loadFirstStopDischarge == soc {
-				logger.Info("applied", slog.Duration("seconds", time.Duration(time.Now().Unix()-start.Unix())))
-				break applied
-			}
 			logger.Info("waiting for LoadFirstStopDischarge to apply", slog.Int64("have", loadFirstStopDischarge))
 		}
 	}
@@ -373,14 +372,14 @@ func (sa *SolarAssistant) subscribers(c mqtt.Client) {
 	}
 	if token := c.Subscribe(TopicDeviceModeState, 0, func(client mqtt.Client, msg mqtt.Message) {
 		if err := sa.SetCurrentDeviceMode(string(msg.Payload())); err != nil {
-			sa.logger.Warn("error setting device mode", string(msg.Payload()))
+			sa.logger.Warn("error setting device mode", slog.String("payload", string(msg.Payload())))
 		}
 	}); token.Wait() && token.Error() != nil {
 		panic(token.Error())
 	}
 	if token := c.Subscribe(TopicBatteryFirstGridChargeState, 0, func(client mqtt.Client, msg mqtt.Message) {
 		if err := sa.SetCurrentBatteryFirstGridCharge(string(msg.Payload())); err != nil {
-			sa.logger.Warn("error setting battery charge", string(msg.Payload()))
+			sa.logger.Warn("error setting battery charge", slog.String("payload", string(msg.Payload())))
 		}
 	}); token.Wait() && token.Error() != nil {
 		panic(token.Error())
