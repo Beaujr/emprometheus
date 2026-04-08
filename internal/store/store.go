@@ -43,6 +43,8 @@ type StateStore interface {
 	GetSoc() (int64, error)
 	GetDeviceMode() (string, error)
 	GetGridCharge() (string, error)
+	SetLoadFirstStopDischarge(soc int64) error
+	GetLoadFirstStopDischarge() (int64, error)
 }
 
 type StateAccessorStore interface {
@@ -58,6 +60,8 @@ type StateAccessorStore interface {
 	GetBatteryFirstGridChargeTarget() (string, error)
 	GetSOCTarget() (int64, error)
 	GetDeviceModeTarget() (string, error)
+	SetLoadFirstStopDischarge(soc int64) error
+	GetLoadFirstStopDischarge() (int64, error)
 }
 
 type Row struct {

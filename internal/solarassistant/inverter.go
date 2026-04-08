@@ -5,26 +5,28 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"log/slog"
+
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/store"
 	"go.opentelemetry.io/otel/attribute"
-	"log/slog"
 
-	"github.com/beaujr/emprometheus/internal/scheduler"
-	mqtt "github.com/eclipse/paho.mqtt.golang"
-	api "go.opentelemetry.io/otel/metric"
 	"log"
 	"os"
 	"slices"
 	"strconv"
-	"sync"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/scheduler"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
+	api "go.opentelemetry.io/otel/metric"
 )
 
 const (
 	TopicBatteryFirstGridCharge      = "solar_assistant/inverter_1/battery_first_grid_charge/set"
 	TopicWorkModePriority            = "solar_assistant/inverter_1/work_mode_priority/set"
 	TopicLoadFirstStopDischarge      = "solar_assistant/inverter_1/load_first_stop_discharge/set"
+	TopicLoadFirstStopDischargeState = "solar_assistant/inverter_1/load_first_stop_discharge/state"
 	TopicSOCState                    = "solar_assistant/total/battery_state_of_charge/state"
 	TopicDeviceModeState             = "solar_assistant/inverter_1/device_mode/state"
 	TopicBatteryFirstGridChargeState = "solar_assistant/inverter_1/battery_first_grid_charge/state"
@@ -72,237 +74,6 @@ func init() {
 
 }
 
-type state struct {
-	soc                    int64
-	deviceMode, gridCharge string
-}
-
-func (s *state) SetSoc(soc int64) error {
-	s.soc = soc
-	return nil
-}
-
-func (s *state) SetDeviceMode(deviceMode string) error {
-	s.deviceMode = deviceMode
-	return nil
-}
-
-func (s *state) SetGridCharge(gridCharge string) error {
-	s.gridCharge = gridCharge
-	return nil
-}
-func (s *state) GetSoc() (int64, error) {
-	return s.soc, nil
-}
-
-func (s *state) GetDeviceMode() (string, error) {
-	return s.deviceMode, nil
-}
-
-func (s *state) GetGridCharge() (string, error) {
-	return s.gridCharge, nil
-}
-
-type stateHandler struct {
-	sync.Mutex
-	state  store.StateStore
-	target store.StateStore
-	parent store.StateAccessorStore
-}
-
-func (h *stateHandler) Load() error {
-	socTarget, err := h.parent.GetSOCTarget()
-	if err != nil {
-		return err
-	}
-	err = h.target.SetSoc(socTarget)
-	if err != nil {
-		return err
-	}
-	soc, err := h.parent.GetSOC()
-	err = h.state.SetSoc(soc)
-
-	deviceMode, err := h.parent.GetDeviceMode()
-	if err != nil {
-		return err
-	}
-	err = h.state.SetDeviceMode(deviceMode)
-	deviceModeTarget, err := h.parent.GetDeviceModeTarget()
-	if err != nil {
-		return err
-	}
-	err = h.target.SetDeviceMode(deviceModeTarget)
-	if err != nil {
-		return err
-	}
-	gridCharge, err := h.parent.GetBatteryFirstGridCharge()
-	if err != nil {
-		return err
-	}
-	err = h.state.SetGridCharge(gridCharge)
-	if err != nil {
-		return err
-	}
-	gridChargeTarget, err := h.parent.GetBatteryFirstGridChargeTarget()
-	if err != nil {
-		return err
-	}
-	err = h.target.SetGridCharge(gridChargeTarget)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (h *stateHandler) SetBatteryFirstGridCharge(enabled string) error {
-	h.Lock()
-	defer h.Unlock()
-	sEnabled, err := h.state.GetGridCharge()
-	if err != nil {
-		return err
-	}
-	if enabled != sEnabled {
-		if h.parent != nil {
-			h.parent.SetBatteryFirstGridCharge(enabled)
-		}
-		h.state.SetGridCharge(enabled)
-	}
-	return nil
-}
-
-func (h *stateHandler) SetSOC(soc int64) error {
-	h.Lock()
-	defer h.Unlock()
-	sSoc, err := h.state.GetSoc()
-	if err != nil {
-		return err
-	}
-	if soc != sSoc {
-		if h.parent != nil {
-			h.parent.SetSOC(soc)
-		}
-		h.state.SetSoc(soc)
-	}
-	return nil
-}
-
-func (h *stateHandler) SetDeviceMode(mode string) error {
-	h.Lock()
-	defer h.Unlock()
-	sMode, err := h.state.GetDeviceMode()
-	if err != nil {
-		return nil
-	}
-	if mode != sMode {
-		if h.parent != nil {
-			err = h.parent.SetDeviceMode(mode)
-			if err != nil {
-				return nil
-			}
-		}
-		err = h.state.SetDeviceMode(mode)
-		if err != nil {
-			return nil
-		}
-	}
-	return nil
-}
-
-func (h *stateHandler) GetBatteryFirstGridCharge() (string, error) {
-	h.Lock()
-	defer h.Unlock()
-	return h.state.GetGridCharge()
-}
-
-func (h *stateHandler) GetSOC() (int64, error) {
-	h.Lock()
-	defer h.Unlock()
-	return h.state.GetSoc()
-}
-
-func (h *stateHandler) GetDeviceMode() (string, error) {
-	h.Lock()
-	defer h.Unlock()
-	return h.state.GetDeviceMode()
-}
-
-func (h *stateHandler) SetBatteryFirstGridChargeTarget(enabled string) error {
-	h.Lock()
-	defer h.Unlock()
-	sEnabled, err := h.state.GetGridCharge()
-	if err != nil {
-		return err
-	}
-	if enabled != sEnabled {
-		if h.parent != nil {
-			if err = h.parent.SetBatteryFirstGridChargeTarget(enabled); err != nil {
-				return err
-			}
-		}
-		if err = h.target.SetGridCharge(enabled); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (h *stateHandler) SetSOCTarget(soc int64) error {
-	h.Lock()
-	defer h.Unlock()
-	tSoc, err := h.target.GetSoc()
-	if err != nil {
-		return err
-	}
-	if soc != tSoc {
-		if h.parent != nil {
-			if err = h.parent.SetSOCTarget(soc); err != nil {
-				return err
-			}
-		}
-		if err = h.target.SetSoc(soc); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (h *stateHandler) SetDeviceModeTarget(mode string) error {
-	h.Lock()
-	defer h.Unlock()
-	sMode, err := h.target.GetDeviceMode()
-	if err != nil {
-		return err
-	}
-	if sMode != mode {
-		if h.parent != nil {
-			if err = h.parent.SetDeviceModeTarget(mode); err != nil {
-				return err
-			}
-		}
-		if err = h.target.SetDeviceMode(mode); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-func (h *stateHandler) GetBatteryFirstGridChargeTarget() (string, error) {
-	h.Lock()
-	defer h.Unlock()
-	return h.target.GetGridCharge()
-}
-
-func (h *stateHandler) GetSOCTarget() (int64, error) {
-	h.Lock()
-	defer h.Unlock()
-	return h.target.GetSoc()
-}
-
-func (h *stateHandler) GetDeviceModeTarget() (string, error) {
-	h.Lock()
-	defer h.Unlock()
-	return h.target.GetDeviceMode()
-}
-
 type SolarAssistant struct {
 	client       mqtt.Client
 	stateHandler store.StateAccessorStore
@@ -330,7 +101,7 @@ func (sa *SolarAssistant) Stop(_ context.Context) error {
 	return nil
 }
 
-func (sa *SolarAssistant) Status(ctx context.Context) (batteryfirstgridcharge string, workmodepriority string, soc int64, err error) {
+func (sa *SolarAssistant) Status(_ context.Context) (batteryfirstgridcharge string, workmodepriority string, soc int64, err error) {
 	soc, err = sa.GetTargetSOC()
 	if err != nil {
 		return "", "", 0, err
@@ -365,14 +136,6 @@ func (sa *SolarAssistant) Process(ctx context.Context, batteryfirstgridcharge st
 
 	switch workmodepriority {
 	case scheduler.WorkModeBatteryFirst:
-		// why would I want to maintain the higher SOC for target?
-		//currentSoc, err := sa.GetCurrentSOC()
-		//if err != nil {
-		//	return err
-		//}
-		//if currentSoc > soc {
-		//	soc = currentSoc
-		//}
 		if err := sa.SetLoadFirstStopDischarge(soc); err != nil {
 			return err
 		}
@@ -400,6 +163,7 @@ func (sa *SolarAssistant) SetBatteryFirstGridCharge(enabled string) error {
 	if token := sa.client.Publish(TopicBatteryFirstGridCharge, 0, false, enabled); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
+
 	if err = sa.stateHandler.SetBatteryFirstGridChargeTarget(enabled); err != nil {
 		return err
 	}
@@ -430,11 +194,35 @@ func (sa *SolarAssistant) SetLoadFirstStopDischarge(soc int64) error {
 		soc = 10
 	}
 
+	start := time.Now()
 	if token := sa.client.Publish(TopicLoadFirstStopDischarge, 0, false, fmt.Sprintf("%d", soc)); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
-	sa.SetTargetSOC(soc)
-	return nil
+	timeout := time.After(time.Minute)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	logger := sa.logger.With(slog.Int64("want", soc))
+applied:
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for LoadFirstStopDischarge to become %d", soc)
+
+		case <-ticker.C:
+			loadFirstStopDischarge, err := sa.stateHandler.GetLoadFirstStopDischarge()
+			if err != nil {
+				return err
+			}
+
+			if loadFirstStopDischarge == soc {
+				logger.Info("applied", slog.Duration("seconds", time.Duration(time.Now().Unix()-start.Unix())))
+				break applied
+			}
+			logger.Info("waiting for LoadFirstStopDischarge to apply", slog.Int64("have", loadFirstStopDischarge))
+		}
+	}
+
+	return sa.SetTargetSOC(soc)
 }
 
 type Option = func(s *SolarAssistant) error
@@ -464,7 +252,9 @@ func WithStateHandler(handler store.StateAccessorStore) Option {
 			target: &state{},
 			parent: handler,
 		}
-		sh.Load()
+		if err := sh.Load(); err != nil {
+			return err
+		}
 		s.stateHandler = sh
 		return nil
 	}
@@ -582,19 +372,39 @@ func (sa *SolarAssistant) subscribers(c mqtt.Client) {
 		panic(token.Error())
 	}
 	if token := c.Subscribe(TopicDeviceModeState, 0, func(client mqtt.Client, msg mqtt.Message) {
-		sa.SetCurrentDeviceMode(string(msg.Payload()))
+		if err := sa.SetCurrentDeviceMode(string(msg.Payload())); err != nil {
+			sa.logger.Warn("error setting device mode", string(msg.Payload()))
+		}
 	}); token.Wait() && token.Error() != nil {
 		panic(token.Error())
 	}
 	if token := c.Subscribe(TopicBatteryFirstGridChargeState, 0, func(client mqtt.Client, msg mqtt.Message) {
-		sa.SetCurrentBatteryFirstGridCharge(string(msg.Payload()))
+		if err := sa.SetCurrentBatteryFirstGridCharge(string(msg.Payload())); err != nil {
+			sa.logger.Warn("error setting battery charge", string(msg.Payload()))
+		}
+	}); token.Wait() && token.Error() != nil {
+		panic(token.Error())
+	}
+
+	if token := c.Subscribe(TopicLoadFirstStopDischargeState, 0, func(client mqtt.Client, msg mqtt.Message) {
+		soc, err := strconv.ParseInt(string(msg.Payload()), 10, 64)
+		if err != nil {
+			sa.logger.Error(err.Error(), slog.String("payload", string(msg.Payload())))
+			return
+		}
+		if err = sa.SetLoadFirstStopDischargeState(soc); err != nil {
+			sa.logger.Error(err.Error(), slog.String("payload", string(msg.Payload())))
+			return
+		}
 	}); token.Wait() && token.Error() != nil {
 		panic(token.Error())
 	}
 }
 
 func (sa *SolarAssistant) SetCurrentSOC(soc int64) error {
-	sa.stateHandler.SetSOC(soc)
+	if err := sa.stateHandler.SetSOC(soc); err != nil {
+		return err
+	}
 	// if the target is less or equal to current soc, revert to grid
 	tSoc, err := sa.stateHandler.GetSOCTarget()
 	if err != nil {
@@ -625,12 +435,16 @@ func (sa *SolarAssistant) SetCurrentSOC(soc int64) error {
 	return nil
 }
 
-func (sa *SolarAssistant) SetCurrentDeviceMode(mode string) {
-	sa.stateHandler.SetDeviceMode(mode)
+func (sa *SolarAssistant) SetCurrentDeviceMode(mode string) error {
+	return sa.stateHandler.SetDeviceMode(mode)
 }
 
-func (sa *SolarAssistant) SetCurrentBatteryFirstGridCharge(gridFirstBatteryCharge string) {
-	sa.stateHandler.SetBatteryFirstGridCharge(gridFirstBatteryCharge)
+func (sa *SolarAssistant) SetCurrentBatteryFirstGridCharge(gridFirstBatteryCharge string) error {
+	return sa.stateHandler.SetBatteryFirstGridCharge(gridFirstBatteryCharge)
+}
+
+func (sa *SolarAssistant) SetLoadFirstStopDischargeState(soc int64) error {
+	return sa.stateHandler.SetLoadFirstStopDischarge(soc)
 }
 
 func (sa *SolarAssistant) GetCurrentSOC() (int64, error) {
@@ -649,8 +463,8 @@ func (sa *SolarAssistant) GetTargetSOC() (int64, error) {
 	return sa.stateHandler.GetSOCTarget() // remove error later? or keep for compatibility?
 }
 
-func (sa *SolarAssistant) SetTargetSOC(soc int64) {
-	sa.stateHandler.SetSOCTarget(soc) // remove error later? or keep for compatibility?
+func (sa *SolarAssistant) SetTargetSOC(soc int64) error {
+	return sa.stateHandler.SetSOCTarget(soc) // remove error later? or keep for compatibility?
 }
 
 func (sa *SolarAssistant) GetTargetDeviceMode() (string, error) {

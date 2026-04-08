@@ -27,14 +27,15 @@ type ControllablePowerPlant interface {
 	SimplePowerPlant
 	SetBatteryFirstGridCharge(enabled string) error
 	SetWorkModePriority(workmode string) error
-	SetLoadFirstStopDischarge(soc int64) error
+	//SetLoadFirstStopDischarge(soc int64) error
+	SetLoadFirstStopDischargeState(soc int64) error
 	SetCurrentSOC(soc int64) error
 	GetCurrentSOC() (int64, error)
 	GetTargetSOC() (int64, error)
-	SetCurrentDeviceMode(mode string)
+	SetCurrentDeviceMode(mode string) error
 	GetCurrentDeviceMode() (string, error)
 	GetTargetDeviceMode() (string, error)
-	SetCurrentBatteryFirstGridCharge(gridFirstBatteryCharge string)
+	SetCurrentBatteryFirstGridCharge(gridFirstBatteryCharge string) error
 	GetCurrentBatteryFirstGridCharge() (string, error)
 	GetTargetBatteryFirstGridCharge() (string, error)
 	Start(ctx context.Context) error

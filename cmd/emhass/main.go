@@ -49,7 +49,7 @@ var (
 	dsn                    = flag.String("dsn", "", "postgres DSN if using database to store schedules")
 	password               = flag.String("password", "", "password for admin endpoint")
 	timezone               = flag.String("timezone", "Europe/London", "time zone")
-	steps                  = flag.Int("steps", 144, "number of steps to generate")
+	steps                  = flag.Int("steps", 24, "number of steps to generate")
 )
 
 type basicAuthTransport struct {

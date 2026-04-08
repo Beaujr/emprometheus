@@ -139,7 +139,11 @@ func (p PostgresStore) migrations() error {
 		PRIMARY KEY (state)
 	);
 `
-	migrations = append(migrations, createOptimizationTable, createTable, actualSocColumn, stateTable)
+
+	liveLoadFirstStopDischargeColumn := `
+	ALTER TABLE inverter_settings
+	ADD COLUMN IF NOT EXISTS load_first_stop_discharge BIGINT NOT NULL DEFAULT 10;`
+	migrations = append(migrations, createOptimizationTable, createTable, actualSocColumn, stateTable, liveLoadFirstStopDischargeColumn)
 	for _, migration := range migrations {
 		if _, err := p.db.Exec(migration); err != nil {
 			return err
@@ -416,6 +420,12 @@ func (p PostgresStore) SetSOCTarget(soc int64) error {
 	if err != nil {
 		return err
 	}
+	// set the load_first_stop_discharge to same as target SoC
+	// this is because we want to charge to the target soc
+	err = p.setField(StateTarget, "load_first_stop_discharge", soc)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -449,7 +459,24 @@ func (p PostgresStore) GetDeviceModeTarget() (string, error) {
 	var v string
 	err := p.getField(StateTarget, "device_mode", &v)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	return v, nil
+}
+
+func (p PostgresStore) GetLoadFirstStopDischarge() (int64, error) {
+	var v int64
+	err := p.getField(StateCurrent, "load_first_stop_discharge", &v)
+	if err != nil {
+		return v, err
+	}
+	return v, nil
+}
+
+func (p PostgresStore) SetLoadFirstStopDischarge(soc int64) error {
+	err := p.setField(StateCurrent, "load_first_stop_discharge", soc)
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -1,13 +1,14 @@
 package solarassistant_test
 
 import (
-	"github.com/beaujr/emprometheus/internal/scheduler"
-	"github.com/beaujr/emprometheus/internal/solarassistant"
-	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"log/slog"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/scheduler"
+	"github.com/beaujr/emprometheus/internal/solarassistant"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 type fakemsg struct {
@@ -73,6 +74,14 @@ func (f fakeclient) Publish(topic string, qos byte, retained bool, msg interface
 		f.plant.SetCurrentDeviceMode(msg.(string))
 	case solarassistant.TopicBatteryFirstGridCharge:
 		f.plant.SetCurrentBatteryFirstGridCharge(msg.(string))
+	case solarassistant.TopicLoadFirstStopDischarge:
+		loadFirstStopDischarge, err := strconv.ParseFloat(msg.(string), 32)
+		if err != nil {
+			return fakeToken{}
+		}
+		if err = f.plant.SetLoadFirstStopDischargeState(int64(loadFirstStopDischarge)); err != nil {
+			return fakeToken{}
+		}
 	}
 	return fakeToken{}
 }

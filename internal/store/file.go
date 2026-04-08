@@ -12,6 +12,16 @@ type FileStore struct {
 	filepath string
 }
 
+func (f FileStore) GetLoadFirstStopDischarge() (int64, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (f FileStore) SetLoadFirstStopDischarge(soc int64) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (f FileStore) Delete(row Row) error {
 	//TODO implement me
 	panic("implement me")
