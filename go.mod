@@ -6,7 +6,7 @@ require (
 	github.com/XSAM/otelsql v0.41.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/google/uuid v1.6.0
-	github.com/lib/pq v1.11.2
+	github.com/lib/pq v1.12.3
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/common v0.67.5
 	go.opentelemetry.io/otel v1.41.0
