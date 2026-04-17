@@ -35,7 +35,7 @@ jobs:
           git tag $NEW_TAG
           git push origin $NEW_TAG
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: stable
       - name: Container Login
