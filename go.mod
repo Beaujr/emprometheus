@@ -13,7 +13,7 @@ require (
 	go.opentelemetry.io/otel/exporters/prometheus v0.65.0
 	go.opentelemetry.io/otel/metric v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
-	go.temporal.io/api v1.54.0
+	go.temporal.io/api v1.62.9
 	go.temporal.io/sdk v1.38.0
 	golang.org/x/sync v0.19.0
 )
