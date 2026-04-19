@@ -2,7 +2,7 @@ version: '3'
 services:
   emhass:
     container_name: emhass
-    image: ghcr.io/davidusb-geek/emhass:v0.17.1
+    image: ghcr.io/davidusb-geek/emhass:v0.17.2
     volumes:
       - ./emhass_config/share:/share
       - ./emhass_config/data:/data
