@@ -62,7 +62,7 @@ func (f *Forecaster) MPCWorkflow(ctx workflow.Context, emhassUrl, emprometheusUr
 	return "OK", nil
 }
 
-func (f *Forecaster) GetHorizonSOCActivity(ctx context.Context) (float64, error) {
+func (f *Forecaster) GetHorizonSOCActivity(_ context.Context) (float64, error) {
 	now := time.Now()
 	rows, err := f.db.Select(now)
 	if err != nil {
@@ -116,7 +116,7 @@ func (f *Forecaster) MPCActivity(ctx context.Context, emhassUrl string, currentS
 	}
 
 	payload := fmt.Sprintf("{\"soc_init\": %.2f, \"prediction_horizon\": %d, \"soc_final\": %.2f}", currentSoc/100, f.horizon, finalSoc)
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/action/%s", emhassUrl, provider.ActionMPC), strings.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/action/%s", emhassUrl, provider.ActionMPC), strings.NewReader(payload))
 	if err != nil {
 		return 0, err
 	}

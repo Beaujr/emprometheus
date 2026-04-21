@@ -134,9 +134,9 @@ func (o *Octopus) produceOctopusCosyTariff() error {
 		}
 	}()
 	// Rates in £/kWh
-	cosy := 0.1368
-	peak := 0.4185
-	standard := 0.279
+	cosy := 0.1017471
+	peak := 0.383418
+	standard := 0.2439213
 
 	// Cosy time windows
 	cosyWindows := []struct {

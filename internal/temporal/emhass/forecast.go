@@ -81,7 +81,7 @@ func (f *Forecaster) ForecastActivity(ctx context.Context, emhassUrl string) (in
 	if err := f.tariff(f.steps); err != nil {
 		return 0, err
 	}
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/action/%s", emhassUrl, provider.ActionForecast), strings.NewReader("{\"publish_prefix\":\"dh_\"}"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/action/%s", emhassUrl, provider.ActionForecast), strings.NewReader("{\"publish_prefix\":\"dh_\"}"))
 	if err != nil {
 		return 0, err
 	}
@@ -94,7 +94,7 @@ func (f *Forecaster) ForecastActivity(ctx context.Context, emhassUrl string) (in
 }
 
 func (f *Forecaster) BuildScheduleActivity(ctx context.Context, emprometheus, forecastMethod string) (int, error) {
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/process", emprometheus), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/process", emprometheus), nil)
 	if err != nil {
 		return 0, err
 	}
