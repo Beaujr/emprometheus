@@ -115,7 +115,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			w.Write([]byte(err.Error()))
 			return
 		}
-		_ = tmpl.Execute(w, struct {
+		err = tmpl.Execute(w, struct {
 			WorkModePriority       string
 			SOC                    int64
 			BatteryFirstGridCharge string
@@ -124,6 +124,11 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			SOC:                    soc,
 			BatteryFirstGridCharge: batteryfirstgridcharge,
 		})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
 	})
 
 	mux.HandleFunc("/admin/process", func(w http.ResponseWriter, r *http.Request) {
