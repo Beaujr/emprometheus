@@ -146,7 +146,7 @@ affinity: {}
 config:
   logging_level: INFO
   costfun: cost
-  historic_days_to_retrieve: 1 # I'm on holiday
+  historic_days_to_retrieve: 14
   method_ts_round: last
   continual_publish: false
   data_path: default
