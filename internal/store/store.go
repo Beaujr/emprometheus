@@ -149,19 +149,19 @@ func OptimizationFromString(line string) (OptimizationResult, error) {
 		if err != nil {
 			return OptimizationResult{}, nil
 		}
-		unitLoadCost, err := strconv.ParseFloat(r[9], 64)
+		unitLoadCost, err := strconv.ParseFloat(r[10], 64)
 		if err != nil {
 			return OptimizationResult{}, nil
 		}
-		unitProdPrice, err := strconv.ParseFloat(r[10], 64)
+		unitProdPrice, err := strconv.ParseFloat(r[11], 64)
 		if err != nil {
 			return OptimizationResult{}, nil
 		}
-		costProfit, err := strconv.ParseFloat(r[11], 64)
+		costProfit, err := strconv.ParseFloat(r[12], 64)
 		if err != nil {
 			return OptimizationResult{}, nil
 		}
-		costFunProfit, err := strconv.ParseFloat(r[12], 64)
+		costFunProfit, err := strconv.ParseFloat(r[13], 64)
 		if err != nil {
 			return OptimizationResult{}, nil
 		}
