@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/beaujr/emprometheus/internal/emhass"
 	"github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
@@ -230,7 +231,7 @@ func (s *Server) copyFile(dir, src, forecastMethod string) error {
 			}
 			continue
 		}
-		o, err := store.OptimizationFromString(headerMapping, fmt.Sprintf("%s,%s", forecastMethod, reader.Text()))
+		o, err := emhass.OptimizationFromString(headerMapping, fmt.Sprintf("%s,%s", forecastMethod, reader.Text()))
 		if err != nil {
 			return err
 		}

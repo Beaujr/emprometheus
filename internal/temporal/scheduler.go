@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	optim "github.com/beaujr/emprometheus/internal/emhass"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/store"
@@ -174,11 +175,11 @@ func (fs *Temporal) InitForecastSchedule(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, optim := range optimizations {
-		if err = fs.db.DeleteAnyOptimization(optim.Time); err != nil {
+	for _, optimization := range optimizations {
+		if err = fs.db.DeleteAnyOptimization(optimization.Time); err != nil {
 			return err
 		}
-		if err = fs.db.Delete(optim); err != nil {
+		if err = fs.db.Delete(optimization); err != nil {
 			return err
 		}
 	}
@@ -416,11 +417,11 @@ func (fs *Temporal) output(ctx context.Context, method string) error {
 	return nil
 }
 
-func GetCommands(rows []store.OptimizationResult) []Schedule {
+func GetCommands(rows []optim.OptimizationResult) []Schedule {
 	if len(rows) == 0 {
 		return nil
 	}
-	minGridRow := slices.MinFunc(rows, func(a, b store.OptimizationResult) int {
+	minGridRow := slices.MinFunc(rows, func(a, b optim.OptimizationResult) int {
 		return cmp.Compare(a.UnitLoadCost(), b.UnitLoadCost())
 	})
 	minPrice := minGridRow.UnitLoadCost()

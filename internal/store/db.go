@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/beaujr/emprometheus/internal/emhass"
 	_ "github.com/lib/pq"
 )
 
@@ -39,7 +40,7 @@ delete from optimization_results where time = $1;
 	return err
 }
 
-func (p PostgresStore) InsertOptimization(r OptimizationResult) error {
+func (p PostgresStore) InsertOptimization(r emhass.OptimizationResult) error {
 	query := `
 INSERT INTO optimization_results (
 	optimization,
@@ -77,19 +78,19 @@ ON CONFLICT (optimization, time) DO UPDATE SET
 	_, err := p.db.Exec(
 		query,
 		r.Optimization,
-		r.time,
-		r.pPV,
-		r.pLoad,
-		r.pGridPos,
-		r.pGridNeg,
-		r.pGrid,
-		r.pBatt,
-		r.socOpt,
-		r.unitLoadCost,
-		r.unitProdPrice,
-		r.costProfit,
-		r.costFunProfit,
-		r.optimStatus,
+		r.Time(),
+		r.PPV(),
+		r.PLoad(),
+		r.PGridPos(),
+		r.PGridNeg(),
+		r.PGrid(),
+		r.PBatt(),
+		r.SOCOpt(),
+		r.UnitLoadCost(),
+		r.UnitProdPrice(),
+		r.CostProfit(),
+		r.CostFunProfit(),
+		r.OptimStatus(),
 	)
 	return err
 
@@ -233,7 +234,7 @@ WHERE time = $1;
 	return row, nil
 }
 
-func (p PostgresStore) SelectOptimization(start time.Time, optimization string) ([]OptimizationResult, error) {
+func (p PostgresStore) SelectOptimization(start time.Time, optimization string) ([]emhass.OptimizationResult, error) {
 	query := `
 SELECT
 	time, p_pv, p_batt, soc_opt, unit_load_cost
@@ -247,20 +248,21 @@ ORDER BY time ASC;
 	}
 	defer rows.Close()
 
-	var result []OptimizationResult
+	var result []emhass.OptimizationResult
 
 	for rows.Next() {
-		var r OptimizationResult
+		var t time.Time
+		var pPV, pBatt, socOpt, unitLoadCost float64
 		if err = rows.Scan(
-			&r.time,
-			&r.pPV,
-			&r.pBatt,
-			&r.socOpt,
-			&r.unitLoadCost,
+			&t,
+			&pPV,
+			&pBatt,
+			&socOpt,
+			&unitLoadCost,
 		); err != nil {
 			return nil, err
 		}
-		result = append(result, r)
+		result = append(result, emhass.NewOptimizationResult(t, socOpt, unitLoadCost, pPV, pBatt))
 	}
 
 	if err = rows.Err(); err != nil {

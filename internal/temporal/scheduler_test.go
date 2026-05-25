@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/beaujr/emprometheus/internal/emhass"
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/store"
 )
@@ -14,15 +15,15 @@ func TestSchedulerGetCommands(t *testing.T) {
 	maxUnitLoadCost := 10.0
 	medUnitLoadCost := 5.0
 	now := time.Now()
-	schedules := []store.OptimizationResult{store.NewOptimizationResult(now.Add(time.Hour), 0.1, maxUnitLoadCost),
-		store.NewOptimizationResult(now.Add(2*time.Hour), 0.1, maxUnitLoadCost),
-		store.NewOptimizationResult(now.Add(3*time.Hour), 0.5, minUnitLoadCost),
-		store.NewOptimizationResult(now.Add(4*time.Hour), 1.0, minUnitLoadCost),
-		store.NewOptimizationResult(now.Add(5*time.Hour), 0.8, medUnitLoadCost),
-		store.NewOptimizationResult(now.Add(6*time.Hour), 0.7, medUnitLoadCost),
-		store.NewOptimizationResult(now.Add(6*time.Hour), 0.7, minUnitLoadCost),
-		store.NewOptimizationResult(now.Add(6*time.Hour), 0.7, maxUnitLoadCost),
-		store.NewOptimizationResult(now.Add(6*time.Hour), 0.7, minUnitLoadCost),
+	schedules := []emhass.OptimizationResult{emhass.NewOptimizationResult(now.Add(time.Hour), 0.1, maxUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(now.Add(2*time.Hour), 0.1, maxUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(now.Add(3*time.Hour), 0.5, minUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(now.Add(4*time.Hour), 1.0, minUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(now.Add(5*time.Hour), 0.8, medUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(now.Add(6*time.Hour), 0.7, medUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(now.Add(6*time.Hour), 0.7, minUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(now.Add(6*time.Hour), 0.7, maxUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(now.Add(6*time.Hour), 0.7, minUnitLoadCost, 0, 0),
 	}
 	schs := GetCommands(schedules)
 	if schs == nil {
@@ -73,18 +74,18 @@ func TestThirtyMinuteSchedule(t *testing.T) {
 	maxUnitLoadCost := 10.0
 	medUnitLoadCost := 5.0
 	now := time.Now()
-	schedules := []store.OptimizationResult{
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 1, 0), 0.1, maxUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 1, 30), 0.1, maxUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 00), 0.1, maxUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 30), 0.5, minUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 30), 0.5, minUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 3, 00), 1.0, minUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 3, 30), 0.8, medUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 4, 00), 0.7, medUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 4, 30), 0.7, minUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 5, 00), 0.7, maxUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 5, 30), 0.7, minUnitLoadCost),
+	schedules := []emhass.OptimizationResult{
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 1, 0), 0.1, maxUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 1, 30), 0.1, maxUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 00), 0.1, maxUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 30), 0.5, minUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 30), 0.5, minUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 3, 00), 1.0, minUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 3, 30), 0.8, medUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 4, 00), 0.7, medUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 4, 30), 0.7, minUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 5, 00), 0.7, maxUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 5, 30), 0.7, minUnitLoadCost, 0, 0),
 	}
 	schs := GetCommands(schedules)
 	if schs == nil {
@@ -117,10 +118,10 @@ func TestHigherSOCInNextRowSchedule(t *testing.T) {
 	minUnitLoadCost := 1.0
 	maxUnitLoadCost := 10.0
 	now := time.Now()
-	schedules := []store.OptimizationResult{
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 1, 0), 0.1, maxUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 1, 30), 0.1, minUnitLoadCost),
-		store.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 00), 1.0, maxUnitLoadCost),
+	schedules := []emhass.OptimizationResult{
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 1, 0), 0.1, maxUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 1, 30), 0.1, minUnitLoadCost, 0, 0),
+		emhass.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 00), 1.0, maxUnitLoadCost, 0, 0),
 	}
 	schs := GetCommands(schedules)
 	if schs == nil {
