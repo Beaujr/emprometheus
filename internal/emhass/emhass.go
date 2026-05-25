@@ -13,12 +13,12 @@ var ErrNotFound = errors.New("not found")
 
 const (
 	timestamp  = "timestamp"
-	p_PV       = "p_PV"
-	p_Load     = "p_Load"
-	p_grid_pos = "p_grid_pos"
-	p_grid_neg = "p_grid_neg"
-	p_grid     = "p_grid"
-	p_batt     = "p_batt"
+	p_PV       = "P_PV"
+	p_Load     = "P_Load"
+	p_grid_pos = "P_grid_pos"
+	p_grid_neg = "P_grid_neg"
+	p_grid     = "P_grid"
+	p_batt     = "P_batt"
 	soc_opt    = "SOC_opt"
 	//soc_deficit_cost = "soc_deficit_cost"
 	unit_load_cost  = "unit_load_cost"
