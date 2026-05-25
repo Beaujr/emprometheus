@@ -421,9 +421,9 @@ func GetCommands(rows []store.OptimizationResult) []Schedule {
 		return nil
 	}
 	minGridRow := slices.MinFunc(rows, func(a, b store.OptimizationResult) int {
-		return cmp.Compare(a.UnitLoadCost, b.UnitLoadCost)
+		return cmp.Compare(a.UnitLoadCost(), b.UnitLoadCost())
 	})
-	minPrice := minGridRow.UnitLoadCost
+	minPrice := minGridRow.UnitLoadCost()
 
 	type block struct {
 		start int
@@ -435,7 +435,7 @@ func GetCommands(rows []store.OptimizationResult) []Schedule {
 	startIdx := 0
 
 	for i := range rows {
-		if rows[i].UnitLoadCost == minPrice {
+		if rows[i].UnitLoadCost() == minPrice {
 			if !inBlock {
 				inBlock = true
 				startIdx = i
@@ -455,10 +455,10 @@ func GetCommands(rows []store.OptimizationResult) []Schedule {
 
 	for _, b := range blocks {
 		// First hour SoC target (converted to %)
-		lastSOC := rows[b.start].SOCOpt * 100
+		lastSOC := rows[b.start].SOCOpt() * 100
 
 		for i := b.start; i <= b.end; i++ {
-			target := rows[i].SOCOpt * 100
+			target := rows[i].SOCOpt() * 100
 
 			// Only allow increases inside the block
 			if target > lastSOC {
@@ -474,8 +474,8 @@ func GetCommands(rows []store.OptimizationResult) []Schedule {
 		workMode := scheduler.WorkModeLoadFirst
 		gridCharge := scheduler.BatteryFirstGridChargeDisabled
 		soc := 10.0 // default load-first SoC
-		targetSOCFromOptimisation := row.SOCOpt
-		if row.UnitLoadCost == minPrice {
+		targetSOCFromOptimisation := row.SOCOpt()
+		if row.UnitLoadCost() == minPrice {
 			// Inside cheap block
 			workMode = scheduler.WorkModeBatteryFirst
 			gridCharge = scheduler.BatteryFirstGridChargeEnabled
@@ -485,7 +485,7 @@ func GetCommands(rows []store.OptimizationResult) []Schedule {
 				// if the next row is higher than this row
 				// set the target soc of this hour to reach that target soc
 				// rows are the bottom of the hour eg 16:00:00 70% soc, so 15:00:00 should set target soc to 70%
-				nextRowSocOpt := rows[i+1].SOCOpt * 100
+				nextRowSocOpt := rows[i+1].SOCOpt() * 100
 				//nextRowUnitLoadCost := rows[i+1].UnitLoadCost
 				if nextRowSocOpt > tSoc {
 					tSoc = nextRowSocOpt
@@ -502,7 +502,7 @@ func GetCommands(rows []store.OptimizationResult) []Schedule {
 			targetSOCFromOptimisation = soc / 100
 		}
 		commands = append(commands, Schedule{
-			time:                  row.Time,
+			time:                  row.Time(),
 			workmode:              workMode,
 			soc:                   soc,
 			chargeBatteryFromGrid: gridCharge,
