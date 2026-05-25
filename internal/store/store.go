@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/emhass"
 )
 
 type Find = func(time.Time) (Row, error)
@@ -25,8 +27,8 @@ type OptimizationStore interface {
 	Insert(Row) error
 	Upsert(row Row) error
 	Delete(row Row) error
-	InsertOptimization(OptimizationResult) error
-	SelectOptimization(start time.Time, optimization string) ([]OptimizationResult, error)
+	InsertOptimization(emhass.OptimizationResult) error
+	SelectOptimization(start time.Time, optimization string) ([]emhass.OptimizationResult, error)
 	DeleteAnyOptimization(start time.Time) error
 }
 

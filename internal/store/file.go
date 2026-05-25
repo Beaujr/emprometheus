@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/emhass"
 )
 
 type FileStore struct {
@@ -32,7 +34,7 @@ func (f FileStore) DeleteAnyOptimization(start time.Time) error {
 	panic("implement me")
 }
 
-func (f FileStore) SelectOptimization(start time.Time, optimization string) ([]OptimizationResult, error) {
+func (f FileStore) SelectOptimization(start time.Time, optimization string) ([]emhass.OptimizationResult, error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -102,7 +104,7 @@ func (f FileStore) GetDeviceModeTarget() (string, error) {
 	panic("implement me")
 }
 
-func (f FileStore) InsertOptimization(row OptimizationResult) error {
+func (f FileStore) InsertOptimization(row emhass.OptimizationResult) error {
 	return nil
 }
 

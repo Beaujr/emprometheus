@@ -1,12 +1,15 @@
-package store
+package emhass
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 )
+
+var ErrNotFound = errors.New("not found")
 
 const (
 	timestamp  = "timestamp"
@@ -63,8 +66,8 @@ func (o OptimizationResult) String() string {
 	)
 }
 
-func NewOptimizationResult(time time.Time, socOpt float64, unitLoadCost float64) OptimizationResult {
-	return OptimizationResult{time: time, socOpt: socOpt, unitLoadCost: unitLoadCost}
+func NewOptimizationResult(time time.Time, socOpt, unitLoadCost, pPV, pBatt float64) OptimizationResult {
+	return OptimizationResult{time: time, socOpt: socOpt, unitLoadCost: unitLoadCost, pPV: pPV, pBatt: pBatt}
 }
 
 func (o OptimizationResult) Time() time.Time {
@@ -75,12 +78,48 @@ func (o OptimizationResult) PPV() float64 {
 	return o.pPV
 }
 
+func (o OptimizationResult) PLoad() float64 {
+	return o.pLoad
+}
+
+func (o OptimizationResult) PGrid() float64 {
+	return o.pGrid
+}
+
+func (o OptimizationResult) PGridPos() float64 {
+	return o.pGridPos
+}
+
+func (o OptimizationResult) PGridNeg() float64 {
+	return o.pGridNeg
+}
+
 func (o OptimizationResult) UnitLoadCost() float64 {
 	return o.unitLoadCost
 }
 
 func (o OptimizationResult) SOCOpt() float64 {
 	return o.socOpt
+}
+
+func (o OptimizationResult) PBatt() float64 {
+	return o.pBatt
+}
+
+func (o OptimizationResult) UnitProdPrice() float64 {
+	return o.unitProdPrice
+}
+
+func (o OptimizationResult) CostProfit() float64 {
+	return o.costProfit
+}
+
+func (o OptimizationResult) CostFunProfit() float64 {
+	return o.costFunProfit
+}
+
+func (o OptimizationResult) OptimStatus() string {
+	return o.optimStatus
 }
 
 func OptimizationFromString(mapping map[string]int, line string) (OptimizationResult, error) {
