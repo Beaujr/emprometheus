@@ -14,6 +14,25 @@ type Find = func(time.Time) (Row, error)
 
 var ErrNotFound = errors.New("not found")
 
+const (
+	timestamp  = "timestamp"
+	P_PV       = "P_PV"
+	P_Load     = "P_Load"
+	P_grid_pos = "P_grid_pos"
+	P_grid_neg = "P_grid_neg"
+	P_grid     = "P_grid"
+	P_batt     = "P_batt"
+	SOC_opt    = "SOC_opt"
+	//soc_deficit_cost = "soc_deficit_cost"
+	unit_load_cost  = "unit_load_cost"
+	unit_prod_price = "unit_prod_price"
+	//maximum_power_from_grid = "maximum_power_from_grid"
+	//maximum_power_to_grid = "maximum_power_to_grid"
+	cost_profit     = "cost_profit"
+	cost_fun_profit = "cost_fun_profit"
+	optim_status    = "optim_status"
+)
+
 type Store interface {
 	OptimizationStore
 	MinimalStore
@@ -109,61 +128,61 @@ func (o OptimizationResult) String() string {
 	)
 }
 
-func OptimizationFromString(line string) (OptimizationResult, error) {
+func OptimizationFromString(mapping map[string]int, line string) (OptimizationResult, error) {
 	csvreader := csv.NewReader(strings.NewReader(line))
 	record, err := csvreader.ReadAll()
 	if err != nil {
 		return OptimizationResult{}, err
 	}
 	for _, r := range record {
-		t, err := time.Parse("2006-01-02 15:04:05-07:00", r[1])
+		t, err := time.Parse("2006-01-02 15:04:05-07:00", r[mapping[timestamp]])
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
 
-		pPV, err := strconv.ParseFloat(r[2], 64)
+		pPV, err := strconv.ParseFloat(r[mapping[P_PV]], 64)
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
-		pLoad, err := strconv.ParseFloat(r[3], 64)
+		pLoad, err := strconv.ParseFloat(r[mapping[P_Load]], 64)
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
-		pGridPos, err := strconv.ParseFloat(r[4], 64)
+		pGridPos, err := strconv.ParseFloat(r[mapping[P_grid_pos]], 64)
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
-		pGridNeg, err := strconv.ParseFloat(r[5], 64)
+		pGridNeg, err := strconv.ParseFloat(r[mapping[P_grid_neg]], 64)
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
-		pGrid, err := strconv.ParseFloat(r[6], 64)
+		pGrid, err := strconv.ParseFloat(r[mapping[P_grid]], 64)
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
-		pBatt, err := strconv.ParseFloat(r[7], 64)
+		pBatt, err := strconv.ParseFloat(r[mapping[P_batt]], 64)
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
-		socOpt, err := strconv.ParseFloat(r[8], 64)
+		socOpt, err := strconv.ParseFloat(r[mapping[SOC_opt]], 64)
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
-		unitLoadCost, err := strconv.ParseFloat(r[10], 64)
+		unitLoadCost, err := strconv.ParseFloat(r[mapping[unit_load_cost]], 64)
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
-		unitProdPrice, err := strconv.ParseFloat(r[11], 64)
+		unitProdPrice, err := strconv.ParseFloat(r[mapping[unit_prod_price]], 64)
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
-		costProfit, err := strconv.ParseFloat(r[12], 64)
+		costProfit, err := strconv.ParseFloat(r[mapping[cost_profit]], 64)
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
-		costFunProfit, err := strconv.ParseFloat(r[13], 64)
+		costFunProfit, err := strconv.ParseFloat(r[mapping[cost_fun_profit]], 64)
 		if err != nil {
-			return OptimizationResult{}, nil
+			return OptimizationResult{}, err
 		}
 
 		return OptimizationResult{
@@ -180,7 +199,7 @@ func OptimizationFromString(line string) (OptimizationResult, error) {
 			UnitProdPrice: unitProdPrice,
 			CostProfit:    costProfit,
 			CostFunProfit: costFunProfit,
-			OptimStatus:   r[13],
+			OptimStatus:   r[mapping[optim_status]],
 		}, nil
 	}
 	return OptimizationResult{}, ErrNotFound

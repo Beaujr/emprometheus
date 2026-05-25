@@ -221,12 +221,16 @@ func (s *Server) copyFile(dir, src, forecastMethod string) error {
 	}
 	reader := bufio.NewScanner(sourceFile)
 	idx := 0
+	headerMapping := map[string]int{}
 	for reader.Scan() {
 		if idx == 0 {
 			idx++
+			for index, key := range strings.Split(reader.Text(), ",") {
+				headerMapping[key] = index + 1
+			}
 			continue
 		}
-		o, err := store.OptimizationFromString(fmt.Sprintf("%s,%s", forecastMethod, reader.Text()))
+		o, err := store.OptimizationFromString(headerMapping, fmt.Sprintf("%s,%s", forecastMethod, reader.Text()))
 		if err != nil {
 			return err
 		}
