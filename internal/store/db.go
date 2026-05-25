@@ -77,19 +77,19 @@ ON CONFLICT (optimization, time) DO UPDATE SET
 	_, err := p.db.Exec(
 		query,
 		r.Optimization,
-		r.Time,
-		r.PPV,
-		r.PLoad,
-		r.PGridPos,
-		r.PGridNeg,
-		r.PGrid,
-		r.PBatt,
-		r.SOCOpt,
-		r.UnitLoadCost,
-		r.UnitProdPrice,
-		r.CostProfit,
-		r.CostFunProfit,
-		r.OptimStatus,
+		r.time,
+		r.pPV,
+		r.pLoad,
+		r.pGridPos,
+		r.pGridNeg,
+		r.pGrid,
+		r.pBatt,
+		r.socOpt,
+		r.unitLoadCost,
+		r.unitProdPrice,
+		r.costProfit,
+		r.costFunProfit,
+		r.optimStatus,
 	)
 	return err
 
@@ -252,11 +252,11 @@ ORDER BY time ASC;
 	for rows.Next() {
 		var r OptimizationResult
 		if err = rows.Scan(
-			&r.Time,
-			&r.PPV,
-			&r.PBatt,
-			&r.SOCOpt,
-			&r.UnitLoadCost,
+			&r.time,
+			&r.pPV,
+			&r.pBatt,
+			&r.socOpt,
+			&r.unitLoadCost,
 		); err != nil {
 			return nil, err
 		}
