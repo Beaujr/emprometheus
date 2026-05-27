@@ -243,6 +243,7 @@ func (s *Server) copyFile(logger *slog.Logger, dir, src, forecastMethod string) 
 		}
 		o, err := emhass.OptimizationFromString(logger, headerMapping, fmt.Sprintf("%s,%s", forecastMethod, reader.Text()))
 		if err != nil {
+			logger.Error("failed reading from string", slog.String("error", err.Error()))
 			return err
 		}
 		err = s.db.InsertOptimization(o)
