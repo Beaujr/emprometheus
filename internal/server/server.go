@@ -93,14 +93,9 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			w.Write([]byte(err.Error()))
 			return
 		}
+		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusCreated {
 			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		_, err = io.Copy(w, resp.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
 			return
 		}
 		fm := r.PathValue("forecast")
@@ -112,6 +107,13 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
+		_, err = io.Copy(w, resp.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
 	})
 
 	var tmpl = template.Must(template.ParseFS(templateFS, "templates/admin.html"))
