@@ -97,7 +97,6 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(resp.StatusCode)
 		_, err = io.Copy(w, resp.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -110,6 +109,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			w.Write([]byte(err.Error()))
 			return
 		}
+		w.WriteHeader(resp.StatusCode)
 	})
 
 	var tmpl = template.Must(template.ParseFS(templateFS, "templates/admin.html"))
