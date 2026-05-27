@@ -241,7 +241,7 @@ func (s *Server) copyFile(logger *slog.Logger, dir, src, forecastMethod string) 
 			logger.Info("headers mapped", slog.Any("headerMapping", headerMapping))
 			continue
 		}
-		o, err := emhass.OptimizationFromString(headerMapping, fmt.Sprintf("%s,%s", forecastMethod, reader.Text()))
+		o, err := emhass.OptimizationFromString(logger, headerMapping, fmt.Sprintf("%s,%s", forecastMethod, reader.Text()))
 		if err != nil {
 			return err
 		}
