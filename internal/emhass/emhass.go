@@ -27,7 +27,7 @@ const (
 	//maximum_power_from_grid = "maximum_power_from_grid"
 	//maximum_power_to_grid = "maximum_power_to_grid"
 	cost_profit     = "cost_profit"
-	cost_fun_profit = "cost_fun_profit"
+	cost_fun_profit = "cost_fun_cost"
 	optim_status    = "optim_status"
 )
 
