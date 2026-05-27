@@ -104,7 +104,9 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			return
 		}
 		fm := r.PathValue("forecast")
-		if err = s.copyFile(dir, provider.CSVForecastName, fm); err != nil {
+		logger := s.logger.With(slog.String("file", filepath.Join(dir, provider.CSVForecastName)))
+		if err = s.copyFile(logger, dir, provider.CSVForecastName, fm); err != nil {
+			logger.Error("error reading file", slog.String("error", err.Error()))
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 			return
@@ -214,9 +216,8 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 	return &srv
 }
 
-func (s *Server) copyFile(dir, src, forecastMethod string) error {
+func (s *Server) copyFile(logger *slog.Logger, dir, src, forecastMethod string) error {
 	optimizationFile := filepath.Join(dir, src)
-	logger := s.logger.With(slog.String("file", optimizationFile))
 	logger.Info("opening file")
 	sourceFile, err := os.Open(optimizationFile)
 	if err != nil {
