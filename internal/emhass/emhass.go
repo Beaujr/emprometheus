@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -122,46 +123,61 @@ func (o OptimizationResult) OptimStatus() string {
 	return o.optimStatus
 }
 
-func OptimizationFromString(mapping map[string]int, line string) (OptimizationResult, error) {
+func OptimizationFromString(logger *slog.Logger, mapping map[string]int, line string) (OptimizationResult, error) {
 	csvreader := csv.NewReader(strings.NewReader(line))
 	record, err := csvreader.ReadAll()
 	if err != nil {
 		return OptimizationResult{}, err
 	}
 	for _, r := range record {
+		logger.Info("reading", slog.String("key", timestamp))
 		t, err := time.Parse("2006-01-02 15:04:05-07:00", r[mapping[timestamp]])
 		if err != nil {
 			return OptimizationResult{}, err
 		}
-
+		logger.Info("reading", slog.String("key", p_PV))
 		pPV, err := strconv.ParseFloat(r[mapping[p_PV]], 64)
 		if err != nil {
 			return OptimizationResult{}, err
 		}
+
+		logger.Info("reading", slog.String("key", p_Load))
 		pLoad, err := strconv.ParseFloat(r[mapping[p_Load]], 64)
 		if err != nil {
 			return OptimizationResult{}, err
 		}
+
+		logger.Info("reading", slog.String("key", p_grid_pos))
 		pGridPos, err := strconv.ParseFloat(r[mapping[p_grid_pos]], 64)
 		if err != nil {
 			return OptimizationResult{}, err
 		}
+
+		logger.Info("reading", slog.String("key", p_grid_neg))
 		pGridNeg, err := strconv.ParseFloat(r[mapping[p_grid_neg]], 64)
 		if err != nil {
 			return OptimizationResult{}, err
 		}
+
+		logger.Info("reading", slog.String("key", p_grid))
 		pGrid, err := strconv.ParseFloat(r[mapping[p_grid]], 64)
 		if err != nil {
 			return OptimizationResult{}, err
 		}
+
+		logger.Info("reading", slog.String("key", p_batt))
 		pBatt, err := strconv.ParseFloat(r[mapping[p_batt]], 64)
 		if err != nil {
 			return OptimizationResult{}, err
 		}
+
+		logger.Info("reading", slog.String("key", soc_opt))
 		socOpt, err := strconv.ParseFloat(r[mapping[soc_opt]], 64)
 		if err != nil {
 			return OptimizationResult{}, err
 		}
+
+		logger.Info("reading", slog.String("key", unit_load_cost))
 		unitLoadCost, err := strconv.ParseFloat(r[mapping[unit_load_cost]], 64)
 		if err != nil {
 			return OptimizationResult{}, err
@@ -197,4 +213,11 @@ func OptimizationFromString(mapping map[string]int, line string) (OptimizationRe
 		}, nil
 	}
 	return OptimizationResult{}, ErrNotFound
+}
+
+func getHeading(mapping map[string]int, header string, row []string) (string, error) {
+	if val, ok := mapping[header]; ok {
+		return row[val], nil
+	}
+	return "", ErrNotFound
 }
