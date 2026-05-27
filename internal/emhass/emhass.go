@@ -182,14 +182,19 @@ func OptimizationFromString(logger *slog.Logger, mapping map[string]int, line st
 		if err != nil {
 			return OptimizationResult{}, err
 		}
+		logger.Info("reading", slog.String("key", unit_prod_price))
 		unitProdPrice, err := strconv.ParseFloat(r[mapping[unit_prod_price]], 64)
 		if err != nil {
 			return OptimizationResult{}, err
 		}
+
+		logger.Info("reading", slog.String("key", cost_profit))
 		costProfit, err := strconv.ParseFloat(r[mapping[cost_profit]], 64)
 		if err != nil {
 			return OptimizationResult{}, err
 		}
+
+		logger.Info("reading", slog.String("key", cost_fun_profit))
 		costFunProfit, err := strconv.ParseFloat(r[mapping[cost_fun_profit]], 64)
 		if err != nil {
 			return OptimizationResult{}, err
