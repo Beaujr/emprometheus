@@ -238,6 +238,7 @@ func (s *Server) copyFile(logger *slog.Logger, dir, src, forecastMethod string) 
 			for index, key := range strings.Split(reader.Text(), ",") {
 				headerMapping[key] = index + 1
 			}
+			logger.Info("headers mapped", slog.Any("headerMapping", headerMapping))
 			continue
 		}
 		o, err := emhass.OptimizationFromString(headerMapping, fmt.Sprintf("%s,%s", forecastMethod, reader.Text()))
