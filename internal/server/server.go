@@ -111,7 +111,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, tariffs provider.RateFe
 			w.Write([]byte(err.Error()))
 			return
 		}
-		w.WriteHeader(resp.StatusCode)
+		w.WriteHeader(http.StatusCreated)
 	})
 
 	var tmpl = template.Must(template.ParseFS(templateFS, "templates/admin.html"))
