@@ -248,11 +248,12 @@ func (s *Server) copyFile(logger *slog.Logger, dir, src, forecastMethod string) 
 		}
 		err = s.db.InsertOptimization(o)
 		if err != nil {
+			logger.Error("failed inserting optimization", slog.String("error", err.Error()))
 			return err
 		}
 	}
 	logger.Info("reading finished", slog.Int("rows", idx))
-	return err
+	return nil
 }
 
 func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {
