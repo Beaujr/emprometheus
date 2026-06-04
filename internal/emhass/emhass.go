@@ -1,6 +1,7 @@
 package emhass
 
 import (
+	"bufio"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -10,17 +11,22 @@ import (
 	"time"
 )
 
-var ErrNotFound = errors.New("not found")
+var (
+	ErrNotFound       = errors.New("not found")
+	ErrColumnNotFound = errors.New("column not found")
+	OptimHeaders      = []string{optimization, timestamp, p_PV, p_Load, p_grid_pos, p_grid_neg, p_grid, p_batt, soc_opt, unit_load_cost, unit_prod_price, cost_profit, cost_fun_profit, optim_status}
+)
 
 const (
-	timestamp  = "timestamp"
-	p_PV       = "P_PV"
-	p_Load     = "P_Load"
-	p_grid_pos = "P_grid_pos"
-	p_grid_neg = "P_grid_neg"
-	p_grid     = "P_grid"
-	p_batt     = "P_batt"
-	soc_opt    = "SOC_opt"
+	optimization = "optimization"
+	timestamp    = "timestamp"
+	p_PV         = "P_PV"
+	p_Load       = "P_Load"
+	p_grid_pos   = "P_grid_pos"
+	p_grid_neg   = "P_grid_neg"
+	p_grid       = "P_grid"
+	p_batt       = "P_batt"
+	soc_opt      = "SOC_opt"
 	//soc_deficit_cost = "soc_deficit_cost"
 	unit_load_cost  = "unit_load_cost"
 	unit_prod_price = "unit_prod_price"
@@ -123,106 +129,131 @@ func (o OptimizationResult) OptimStatus() string {
 	return o.optimStatus
 }
 
+func ReadOptimizationResults(logger *slog.Logger, reader *bufio.Scanner, forecastMethod string) ([]OptimizationResult, error) {
+	idx := 0
+	headerMapping := map[string]int{}
+	var results []OptimizationResult
+	for reader.Scan() {
+		if idx == 0 {
+			idx++
+			line := fmt.Sprintf("%s,%s", optimization, strings.TrimSpace(reader.Text()))
+			csvreader := csv.NewReader(strings.NewReader(line))
+			headers, err := csvreader.Read()
+			if err != nil {
+				return nil, err
+			}
+			for index, key := range headers {
+				headerMapping[key] = index
+			}
+			logger.Info("headers mapped", slog.Any("headerMapping", headerMapping))
+			for _, header := range OptimHeaders {
+				if _, ok := headerMapping[header]; !ok {
+					return nil, ErrColumnNotFound
+				}
+			}
+			continue
+		}
+		o, err := OptimizationFromString(logger, headerMapping, fmt.Sprintf("%s,%s", forecastMethod, reader.Text()))
+		if err != nil {
+			logger.Error("failed reading from string", slog.String("error", err.Error()))
+			return nil, err
+		}
+		results = append(results, o)
+
+	}
+	return results, nil
+}
+
 func OptimizationFromString(logger *slog.Logger, mapping map[string]int, line string) (OptimizationResult, error) {
 	csvreader := csv.NewReader(strings.NewReader(line))
-	record, err := csvreader.ReadAll()
+	r, err := csvreader.Read()
 	if err != nil {
 		return OptimizationResult{}, err
 	}
-	for _, r := range record {
-		logger.Info("reading", slog.String("key", timestamp))
-		t, err := time.Parse("2006-01-02 15:04:05-07:00", r[mapping[timestamp]])
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-		logger.Info("reading", slog.String("key", p_PV))
-		pPV, err := strconv.ParseFloat(r[mapping[p_PV]], 64)
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-
-		logger.Info("reading", slog.String("key", p_Load))
-		pLoad, err := strconv.ParseFloat(r[mapping[p_Load]], 64)
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-
-		logger.Info("reading", slog.String("key", p_grid_pos))
-		pGridPos, err := strconv.ParseFloat(r[mapping[p_grid_pos]], 64)
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-
-		logger.Info("reading", slog.String("key", p_grid_neg))
-		pGridNeg, err := strconv.ParseFloat(r[mapping[p_grid_neg]], 64)
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-
-		logger.Info("reading", slog.String("key", p_grid))
-		pGrid, err := strconv.ParseFloat(r[mapping[p_grid]], 64)
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-
-		logger.Info("reading", slog.String("key", p_batt))
-		pBatt, err := strconv.ParseFloat(r[mapping[p_batt]], 64)
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-
-		logger.Info("reading", slog.String("key", soc_opt))
-		socOpt, err := strconv.ParseFloat(r[mapping[soc_opt]], 64)
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-
-		logger.Info("reading", slog.String("key", unit_load_cost))
-		unitLoadCost, err := strconv.ParseFloat(r[mapping[unit_load_cost]], 64)
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-		logger.Info("reading", slog.String("key", unit_prod_price))
-		unitProdPrice, err := strconv.ParseFloat(r[mapping[unit_prod_price]], 64)
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-
-		logger.Info("reading", slog.String("key", cost_profit))
-		costProfit, err := strconv.ParseFloat(r[mapping[cost_profit]], 64)
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-
-		logger.Info("reading", slog.String("key", cost_fun_profit))
-		costFunProfit, err := strconv.ParseFloat(r[mapping[cost_fun_profit]], 64)
-		if err != nil {
-			return OptimizationResult{}, err
-		}
-
-		return OptimizationResult{
-			Optimization:  r[0],
-			time:          t,
-			pPV:           pPV,
-			pLoad:         pLoad,
-			pGridPos:      pGridPos,
-			pGridNeg:      pGridNeg,
-			pGrid:         pGrid,
-			pBatt:         pBatt,
-			socOpt:        socOpt,
-			unitLoadCost:  unitLoadCost,
-			unitProdPrice: unitProdPrice,
-			costProfit:    costProfit,
-			costFunProfit: costFunProfit,
-			optimStatus:   r[mapping[optim_status]],
-		}, nil
+	logger.Info("reading", slog.String("key", timestamp))
+	t, err := time.Parse("2006-01-02 15:04:05-07:00", r[mapping[timestamp]])
+	if err != nil {
+		return OptimizationResult{}, err
 	}
-	return OptimizationResult{}, ErrNotFound
-}
-
-func getHeading(mapping map[string]int, header string, row []string) (string, error) {
-	if val, ok := mapping[header]; ok {
-		return row[val], nil
+	logger.Info("reading", slog.String("key", p_PV))
+	pPV, err := strconv.ParseFloat(r[mapping[p_PV]], 64)
+	if err != nil {
+		return OptimizationResult{}, err
 	}
-	return "", ErrNotFound
+
+	logger.Info("reading", slog.String("key", p_Load))
+	pLoad, err := strconv.ParseFloat(r[mapping[p_Load]], 64)
+	if err != nil {
+		return OptimizationResult{}, err
+	}
+
+	logger.Info("reading", slog.String("key", p_grid_pos))
+	pGridPos, err := strconv.ParseFloat(r[mapping[p_grid_pos]], 64)
+	if err != nil {
+		return OptimizationResult{}, err
+	}
+
+	logger.Info("reading", slog.String("key", p_grid_neg))
+	pGridNeg, err := strconv.ParseFloat(r[mapping[p_grid_neg]], 64)
+	if err != nil {
+		return OptimizationResult{}, err
+	}
+
+	logger.Info("reading", slog.String("key", p_grid))
+	pGrid, err := strconv.ParseFloat(r[mapping[p_grid]], 64)
+	if err != nil {
+		return OptimizationResult{}, err
+	}
+
+	logger.Info("reading", slog.String("key", p_batt))
+	pBatt, err := strconv.ParseFloat(r[mapping[p_batt]], 64)
+	if err != nil {
+		return OptimizationResult{}, err
+	}
+
+	logger.Info("reading", slog.String("key", soc_opt))
+	socOpt, err := strconv.ParseFloat(r[mapping[soc_opt]], 64)
+	if err != nil {
+		return OptimizationResult{}, err
+	}
+
+	logger.Info("reading", slog.String("key", unit_load_cost))
+	unitLoadCost, err := strconv.ParseFloat(r[mapping[unit_load_cost]], 64)
+	if err != nil {
+		return OptimizationResult{}, err
+	}
+	logger.Info("reading", slog.String("key", unit_prod_price))
+	unitProdPrice, err := strconv.ParseFloat(r[mapping[unit_prod_price]], 64)
+	if err != nil {
+		return OptimizationResult{}, err
+	}
+
+	logger.Info("reading", slog.String("key", cost_profit))
+	costProfit, err := strconv.ParseFloat(r[mapping[cost_profit]], 64)
+	if err != nil {
+		return OptimizationResult{}, err
+	}
+
+	logger.Info("reading", slog.String("key", cost_fun_profit))
+	costFunProfit, err := strconv.ParseFloat(r[mapping[cost_fun_profit]], 64)
+	if err != nil {
+		return OptimizationResult{}, err
+	}
+
+	return OptimizationResult{
+		Optimization:  r[0],
+		time:          t,
+		pPV:           pPV,
+		pLoad:         pLoad,
+		pGridPos:      pGridPos,
+		pGridNeg:      pGridNeg,
+		pGrid:         pGrid,
+		pBatt:         pBatt,
+		socOpt:        socOpt,
+		unitLoadCost:  unitLoadCost,
+		unitProdPrice: unitProdPrice,
+		costProfit:    costProfit,
+		costFunProfit: costFunProfit,
+		optimStatus:   r[mapping[optim_status]],
+	}, nil
 }

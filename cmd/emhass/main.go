@@ -177,33 +177,31 @@ func main() {
 			return nil
 		})
 		errGrp.Go(func() error {
-			<-sigkillCtx.Done() // signal received
-			logger.Warn("signal received, shutting down server...")
-
-			// Shutdown server with timeout
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-
-			err = srv.Shutdown(shutdownCtx) // makes errgroup return error
-			if err != nil {
-				return err
-			}
-			err = sa.Stop(shutdownCtx)
-			if err != nil {
-				return err
-			}
-			err = srv.Shutdown(shutdownCtx)
-			if err != nil {
-				return err
-			}
-			return nil
-		})
-
-		errGrp.Go(func() error {
 			return p.Serve(logger.With(slog.String("pkg", "prometheus")))
 		})
-		if err = errGrp.Wait(); err != nil {
-			panic(err)
+		go func() {
+			if err = errGrp.Wait(); err != nil {
+				panic(err)
+			}
+		}()
+		<-sigkillCtx.Done() // signal received
+		logger.Warn("signal received, shutting down server...")
+
+		// Shutdown server with timeout
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err = srv.Shutdown(shutdownCtx) // makes errgroup return error
+		if err != nil {
+			logger.Error(err.Error())
+		}
+		err = sa.Stop(shutdownCtx)
+		if err != nil {
+			logger.Error(err.Error())
+		}
+		err = srv.Shutdown(shutdownCtx)
+		if err != nil {
+			logger.Error(err.Error())
 		}
 	}
 }

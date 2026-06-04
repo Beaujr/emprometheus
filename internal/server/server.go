@@ -232,29 +232,18 @@ func (s *Server) copyFile(logger *slog.Logger, dir, src, forecastMethod string) 
 	}
 	reader := bufio.NewScanner(sourceFile)
 	logger.Info("reading file")
-	idx := 0
-	headerMapping := map[string]int{}
-	for reader.Scan() {
-		if idx == 0 {
-			idx++
-			for index, key := range strings.Split(reader.Text(), ",") {
-				headerMapping[key] = index + 1
-			}
-			logger.Info("headers mapped", slog.Any("headerMapping", headerMapping))
-			continue
-		}
-		o, err := emhass.OptimizationFromString(logger, headerMapping, fmt.Sprintf("%s,%s", forecastMethod, reader.Text()))
-		if err != nil {
-			logger.Error("failed reading from string", slog.String("error", err.Error()))
-			return err
-		}
+	results, err := emhass.ReadOptimizationResults(logger, reader, forecastMethod)
+	if err != nil {
+		return err
+	}
+	logger.Info("reading finished", slog.Int("rows", len(results)))
+	for _, o := range results {
 		err = s.db.InsertOptimization(o)
 		if err != nil {
 			logger.Error("failed inserting optimization", slog.String("error", err.Error()))
 			return err
 		}
 	}
-	logger.Info("reading finished", slog.Int("rows", idx))
 	return nil
 }
 
