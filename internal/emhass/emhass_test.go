@@ -13,11 +13,12 @@ import (
 func TestOptimizationFromString(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	validMapping := map[string]int{}
-	for idx, val := range OptimHeaders {
+	csvHeaders := []string{optimization, "timestamp", "P_PV", "P_Load", "P_grid_pos", "P_grid_neg", "P_grid", "P_batt", "SOC_opt", "soc_deficit_cost", "unit_load_cost", "unit_prod_price", "maximum_power_from_grid", "maximum_power_to_grid", "cost_profit", "cost_fun_profit", "optim_status"}
+	for idx, val := range csvHeaders {
 		validMapping[val] = idx
 	}
 
-	validLine := "opt1,2024-01-01 12:00:00+00:00,1.1,2.2,3.3,4.4,5.5,6.6,7.7,8.8,9.9,10.1,11.2,SUCCESS"
+	validLine := "opt1,2024-01-01 12:00:00+00:00,1058.6904660263276,23.789941102433158,0.0,-1034.9005249238944,-1034.9005249238944,0.0,0.6,0.0,0.3834,0.15,9000.0,9000.0,0.15523507873858416,0.15523507873858416,Optimal"
 
 	tests := []struct {
 		name       string
@@ -44,15 +45,15 @@ func TestOptimizationFromString(t *testing.T) {
 					t.Fatalf("unexpected time: %v", result.time)
 				}
 
-				if result.pPV != 1.1 {
+				if result.pPV != 1058.6904660263276 {
 					t.Fatalf("expected pPV=1.1 got=%v", result.pPV)
 				}
 
-				if result.pLoad != 2.2 {
+				if result.pLoad != 23.789941102433158 {
 					t.Fatalf("expected pLoad=2.2 got=%v", result.pLoad)
 				}
 
-				if result.optimStatus != "SUCCESS" {
+				if result.optimStatus != "Optimal" {
 					t.Fatalf("expected optimStatus=SUCCESS got=%s", result.optimStatus)
 				}
 			},
@@ -60,13 +61,13 @@ func TestOptimizationFromString(t *testing.T) {
 		{
 			name:    "invalid timestamp",
 			mapping: validMapping,
-			line:    "opt1,invalid-time,1.1,2.2,3.3,4.4,5.5,6.6,7.7,8.8,9.9,10.1,11.2,SUCCESS",
+			line:    "opt1,invalidtime,1058.6904660263276,23.789941102433158,0.0,-1034.9005249238944,-1034.9005249238944,0.0,0.6,0.0,0.3834,0.15,9000.0,9000.0,0.15523507873858416,0.15523507873858416,Optimal",
 			wantErr: &time.ParseError{},
 		},
 		{
 			name:    "invalid float",
 			mapping: validMapping,
-			line:    "opt1,2024-01-01 12:00:00+00:00,not-a-float,2.2,3.3,4.4,5.5,6.6,7.7,8.8,9.9,10.1,11.2,SUCCESS",
+			line:    "opt1,invalidtime,test,23.789941102433158,0.0,-1034.9005249238944,-1034.9005249238944,0.0,0.6,0.0,0.3834,0.15,9000.0,9000.0,0.15523507873858416,0.15523507873858416,Optimal",
 			wantErr: errors.New(""),
 		},
 	}
