@@ -11,19 +11,29 @@ services:
     environment:
       - "LOCAL_COST_FUN=profit" # Maximizes profit (exports - imports)
     restart: unless-stopped
-    ports:
-      - "5000:5000"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:5000/ || exit 1" ]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    networks:
+      - emprometheus
   promhass:
     container_name: promhass
     build:
       context: .
+      dockerfile: Dockerfile
       args:
-        APP_NAME: emhass
-    command: ["--dir", "/data", "--server", "--tariff", "false"]
+        APP_NAME: integration
+    command: [ "--emhass_url", "http://emhass:5000", "--dir", "/data" ]
     volumes:
       - ./emhass_config/share:/share
       - ./emhass_config/data:/data
       - /etc/localtime:/etc/localtime:ro
-    restart: unless-stopped
-    ports:
-      - "8123:8123"
+    networks:
+      - emprometheus
+networks:
+  emprometheus:
+    driver: bridge   # Specify driver options
+    driver_opts:
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"

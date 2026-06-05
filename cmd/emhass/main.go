@@ -19,6 +19,7 @@ import (
 	"github.com/beaujr/emprometheus/internal/provider/octopus"
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	s "github.com/beaujr/emprometheus/internal/server"
+	"github.com/beaujr/emprometheus/internal/server/hass"
 	"github.com/beaujr/emprometheus/internal/solarassistant"
 	"github.com/beaujr/emprometheus/internal/store"
 	"github.com/beaujr/emprometheus/internal/store/postgres"
@@ -69,7 +70,7 @@ func main() {
 	sigkillCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
 	defer stop()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	var rateFetcher provider.RateFetcher = func(steps int) error {
+	var rateFetcher = func(steps int) error {
 		logger.Warn(fmt.Sprintf("rate fetcher is disabled, relying on %s already existing", provider.CSVFileName))
 		// dont modify any files and rely on external file creating data_load_cost_forecast.csv
 		return nil
@@ -155,8 +156,8 @@ func main() {
 			}
 			sch = temporalScheduler
 		}
-
-		srv := s.NewServer(sigkillCtx, logger, rateFetcher, querier, *dir, *password, sch, loc, db, sa, *steps)
+		ha := hass.New(logger, rateFetcher, querier, *steps)
+		srv := s.NewServer(sigkillCtx, logger, ha, *dir, *password, sch, loc, db, sa)
 		errGrp, ctx := errgroup.WithContext(sigkillCtx)
 		errGrp.Go(func() error {
 			if err = sch.Start(ctx); err != nil {

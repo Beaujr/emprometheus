@@ -362,34 +362,6 @@ func (fs *Temporal) output(ctx context.Context, method string) error {
 	if err != nil {
 		return err
 	}
-	//file, err := os.Open(filepath.Join(dir, fmt.Sprintf("%s.csv", method)))
-	//if err != nil {
-	//	return err
-	//}
-	//defer file.Close()
-	//reader := csv.NewReader(file)
-	//allRows, err := reader.ReadAll()
-	//if err != nil {
-	//	return err
-	//}
-	//var rows []Row
-	//for i := 1; i < len(allRows); i++ {
-	//	r := allRows[i]
-	//
-	//	t, err := time.Parse("2006-01-02 15:04:05-07:00", r[0])
-	//	if err != nil {
-	//		fmt.Println("Timestamp parse error:", r[0], err)
-	//		continue
-	//	}
-	//	rows = append(rows, Row{
-	//		Timestamp: t,
-	//		PPV:       parseFloat(r[1]),
-	//		Load:      parseFloat(r[2]),
-	//		PBatt:     parseFloat(r[6]),
-	//		SOC:       parseFloat(r[7]),
-	//		Price:     parseFloat(r[8]),
-	//	})
-	//}
 
 	if len(rows) == 0 {
 		fs.logger.Info("No rows parsed.")
