@@ -8,6 +8,7 @@ before:
     - go mod tidy
     - go mod vendor
     - go test ./internal/...
+    - make integration-test
 
 builds:
   - id: emhass

@@ -98,7 +98,7 @@ func (o *Octopus) GenerateOctopusTariff(steps int) error {
 		// todo fix later, but useful for debug now
 		switch {
 		case o.product == "COSY-FIX-12M-25-09-24" && o.tariff == "E-1R-COSY-FIX-12M-25-09-24-N":
-			return o.produceOctopusCosyTariff()
+			return ProduceOctopusCosyTariff(o.dir)
 		case strings.HasPrefix(o.product, "AGILE"):
 			t = time.Now()
 			for _, row := range r.Results {
@@ -121,9 +121,9 @@ func (o *Octopus) GenerateOctopusTariff(steps int) error {
 }
 
 // todo: remove this, exists as manual fix for debugging
-func (o *Octopus) produceOctopusCosyTariff() error {
+func ProduceOctopusCosyTariff(dir string) error {
 	// open output file
-	fo, err := os.Create(filepath.Join(o.dir, provider.CSVFileName))
+	fo, err := os.Create(filepath.Join(dir, provider.CSVFileName))
 	if err != nil {
 		return err
 	}
@@ -152,8 +152,11 @@ func (o *Octopus) produceOctopusCosyTariff() error {
 	// Peak window (16:00–19:00)
 	peakStart := 16
 	peakEnd := 19
-
-	now := time.Now().In(o.loc)
+	loc, err := time.LoadLocation("Europe/London")
+	if err != nil {
+		return err
+	}
+	now := time.Now().In(loc)
 	start := now.Truncate(time.Hour).Add(time.Hour)
 
 	steps := 24
@@ -179,7 +182,7 @@ func (o *Octopus) produceOctopusCosyTariff() error {
 		}
 
 		// Print CSV line
-		line := fmt.Sprintf("%s,%.4f\n", t.In(o.loc).Format("2006-01-02 15:04:05-07:00"), rate)
+		line := fmt.Sprintf("%s,%.4f\n", t.In(loc).Format("2006-01-02 15:04:05-07:00"), rate)
 		if _, err = fo.Write([]byte(line)); err != nil {
 			return err
 		}

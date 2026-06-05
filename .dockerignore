@@ -1,0 +1,9 @@
+.github/
+bin/
+charts/
+dist/
+.gitignore
+.goreleaser.yaml
+docker-compose.yaml
+readme.MD
+renovate.json
