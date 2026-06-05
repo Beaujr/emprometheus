@@ -14,7 +14,8 @@ import (
 var (
 	ErrNotFound       = errors.New("not found")
 	ErrColumnNotFound = errors.New("column not found")
-	OptimHeaders      = []string{optimization, timestamp, p_PV, p_Load, p_grid_pos, p_grid_neg, p_grid, p_batt, soc_opt, unit_load_cost, unit_prod_price, cost_profit, cost_fun_profit, optim_status}
+	OptimHeaders      = []string{optimization, timestamp, p_PV, p_Load, p_grid_pos, p_grid_neg, p_grid, p_batt, soc_opt, unit_load_cost, unit_prod_price, cost_profit, optim_status}
+	CostFuncHeaders   = []string{cost_fun_profit, cost_fun_cost}
 )
 
 const (
@@ -33,7 +34,8 @@ const (
 	//maximum_power_from_grid = "maximum_power_from_grid"
 	//maximum_power_to_grid = "maximum_power_to_grid"
 	cost_profit     = "cost_profit"
-	cost_fun_profit = "cost_fun_cost"
+	cost_fun_cost   = "cost_fun_cost"
+	cost_fun_profit = "cost_fun_profit"
 	optim_status    = "optim_status"
 )
 
@@ -148,6 +150,10 @@ func ReadOptimizationResults(logger *slog.Logger, reader *bufio.Scanner, forecas
 			logger.Info("headers mapped", slog.Any("headerMapping", headerMapping))
 			for _, header := range OptimHeaders {
 				if _, ok := headerMapping[header]; !ok {
+					// cost fun headers depend on config
+					if strings.HasPrefix(header, "cost_fun") {
+
+					}
 					return nil, ErrColumnNotFound
 				}
 			}
@@ -234,10 +240,16 @@ func OptimizationFromString(logger *slog.Logger, mapping map[string]int, line st
 		return OptimizationResult{}, err
 	}
 
-	logger.Info("reading", slog.String("key", cost_fun_profit))
-	costFunProfit, err := strconv.ParseFloat(r[mapping[cost_fun_profit]], 64)
-	if err != nil {
-		return OptimizationResult{}, err
+	logger.Info("reading", slog.String("key", "cost_fun_*"))
+	costFunProfit := 0.0
+	for _, costFunc := range CostFuncHeaders {
+		if _, ok := mapping[costFunc]; ok {
+			cost, err := strconv.ParseFloat(r[mapping[costFunc]], 64)
+			if err != nil {
+				return OptimizationResult{}, err
+			}
+			costFunProfit = cost
+		}
 	}
 
 	return OptimizationResult{
