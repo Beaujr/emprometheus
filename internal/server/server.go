@@ -87,7 +87,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, dir, pas
 			return
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusCreated {
+		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
