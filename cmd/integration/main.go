@@ -17,6 +17,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/beaujr/emprometheus/internal/emhass"
+	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/provider/octopus"
 	"github.com/beaujr/emprometheus/internal/server/hass"
 	"github.com/prometheus/common/model"
@@ -51,23 +52,33 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
+	defer func(Body io.ReadCloser) {
+		err = Body.Close()
+		if err != nil {
+			logger.Error(err.Error())
+		}
+	}(resp.Body)
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		panic(fmt.Errorf("unexpected status code: %d", resp.StatusCode))
 	}
-	optimizationFile := filepath.Join(*dir, "opt_res_latest.csv")
+	optimizationFile := filepath.Join(*dir, provider.CSVForecastName)
 	logger.Info("opening file")
 	sourceFile, err := os.Open(optimizationFile)
 	if err != nil {
 		panic(err)
 	}
-	defer sourceFile.Close()
+	defer func(sourceFile *os.File) {
+		err = sourceFile.Close()
+		if err != nil {
+			logger.Error(err.Error())
+		}
+	}(sourceFile)
 	_, err = sourceFile.Seek(0, io.SeekStart)
 	if err != nil {
 		panic(err)
 	}
 	reader := bufio.NewScanner(sourceFile)
-	results, err := emhass.ReadOptimizationResults(logger, reader, "dayahead_optim")
+	results, err := emhass.ReadOptimizationResults(logger, reader, provider.ActionForecast)
 	if err != nil {
 		panic(err)
 	}
@@ -78,7 +89,7 @@ func main() {
 type FakePrometheus struct{}
 
 func (f FakePrometheus) GetRange(
-	ctx context.Context,
+	_ context.Context,
 	query string,
 	start, end time.Time,
 	step time.Duration,
