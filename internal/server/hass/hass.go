@@ -55,7 +55,8 @@ func (h *Hass) getData(w http.ResponseWriter, r *http.Request) {
 	if step < 3600 {
 		step = 300
 	}
-	query := fmt.Sprintf("%s unless changes(%s[2m]) == 0", pieces[1], pieces[1])
+	// TODO: write a better query
+	query := fmt.Sprintf("avg(%s unless changes(%s[2m]) == 0 or vector(0)) * 2", pieces[1], pieces[1])
 	values, err := prometheus.GetRange(r.Context(), h.p, query, start, time.Now(), step)
 	if err != nil {
 		if !errors.Is(err, prometheus.ErrNoRows) {
