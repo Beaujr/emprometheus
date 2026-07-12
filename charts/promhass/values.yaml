@@ -19,7 +19,7 @@ emhass_image:
   repository: ghcr.io/davidusb-geek/emhass
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "v0.17.8"
+  tag: "v0.17.9"
 
 imagePullSecrets: []
 nameOverride: ""
