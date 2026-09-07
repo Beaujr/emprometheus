@@ -3,7 +3,7 @@ module github.com/beaujr/emprometheus
 go 1.26.1
 
 require (
-	github.com/XSAM/otelsql v0.43.0
+	github.com/XSAM/otelsql v0.44.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.12.3
