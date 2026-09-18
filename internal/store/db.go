@@ -3,9 +3,9 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"github.com/beaujr/emprometheus/internal/types"
 	"time"
 
-	"github.com/beaujr/emprometheus/internal/emhass"
 	_ "github.com/lib/pq"
 )
 
@@ -40,7 +40,7 @@ delete from optimization_results where time = $1;
 	return err
 }
 
-func (p PostgresStore) InsertOptimization(r emhass.OptimizationResult) error {
+func (p PostgresStore) InsertOptimization(r types.OptimizationResult) error {
 	query := `
 INSERT INTO optimization_results (
 	optimization,
@@ -231,7 +231,7 @@ WHERE time = $1;
 	return row, nil
 }
 
-func (p PostgresStore) SelectOptimization(start time.Time, optimization string) ([]emhass.OptimizationResult, error) {
+func (p PostgresStore) SelectOptimization(start time.Time, optimization string) ([]types.OptimizationResult, error) {
 	query := `
 SELECT
 	time, p_pv, p_batt, soc_opt, unit_load_cost
@@ -245,7 +245,7 @@ ORDER BY time ASC;
 	}
 	defer rows.Close()
 
-	var result []emhass.OptimizationResult
+	var result []types.OptimizationResult
 
 	for rows.Next() {
 		var t time.Time
@@ -259,7 +259,7 @@ ORDER BY time ASC;
 		); err != nil {
 			return nil, err
 		}
-		result = append(result, emhass.NewOptimizationResult(t, socOpt, unitLoadCost, pPV, pBatt))
+		result = append(result, types.NewOptimizationResult(t, socOpt, unitLoadCost, pPV, pBatt))
 	}
 
 	if err = rows.Err(); err != nil {
