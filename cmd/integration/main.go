@@ -20,6 +20,7 @@ import (
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/provider/octopus"
 	"github.com/beaujr/emprometheus/internal/server/hass"
+	"github.com/beaujr/emprometheus/internal/store"
 	"github.com/prometheus/common/model"
 )
 
@@ -31,6 +32,13 @@ var (
 func main() {
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	db, err := store.New(store.WithFilestore(*dir, provider.CSVScheduleName))
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
 	var fetcher = func(_ int) error {
 		return octopus.ProduceOctopusCosyTariff(*dir)
 	}
@@ -84,6 +92,17 @@ func main() {
 	}
 	logger.Info("reading finished", slog.Int("rows", len(results)))
 
+	for _, o := range results {
+		if err = db.InsertOptimization(o); err != nil {
+			panic(err)
+		}
+	}
+
+	stored, err := db.SelectOptimization(time.Now().Add(-24*time.Hour), provider.ActionForecast)
+	if err != nil {
+		panic(err)
+	}
+	logger.Info("stored optimization results", slog.Int("rows", len(stored)))
 }
 
 type FakePrometheus struct{}
