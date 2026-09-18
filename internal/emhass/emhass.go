@@ -76,6 +76,25 @@ func NewOptimizationResult(time time.Time, socOpt, unitLoadCost, pPV, pBatt floa
 	return OptimizationResult{time: time, socOpt: socOpt, unitLoadCost: unitLoadCost, pPV: pPV, pBatt: pBatt}
 }
 
+func NewOptimizationResultFull(optimization string, t time.Time, pPV, pLoad, pGridPos, pGridNeg, pGrid, pBatt, socOpt, unitLoadCost, unitProdPrice, costProfit, costFunProfit float64, optimStatus string) OptimizationResult {
+	return OptimizationResult{
+		Optimization:  optimization,
+		time:          t,
+		pPV:           pPV,
+		pLoad:         pLoad,
+		pGridPos:      pGridPos,
+		pGridNeg:      pGridNeg,
+		pGrid:         pGrid,
+		pBatt:         pBatt,
+		socOpt:        socOpt,
+		unitLoadCost:  unitLoadCost,
+		unitProdPrice: unitProdPrice,
+		costProfit:    costProfit,
+		costFunProfit: costFunProfit,
+		optimStatus:   optimStatus,
+	}
+}
+
 func (o OptimizationResult) Time() time.Time {
 	return o.time
 }
