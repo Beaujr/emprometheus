@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	emhass2 "github.com/beaujr/emprometheus/internal/emhass"
 	"log/slog"
-	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -106,13 +106,13 @@ func WithInitOnStart() Option {
 	}
 }
 
-func New(_ context.Context, logger *slog.Logger, c client.Client, tariffs provider.RateFetcher, sa scheduler.ControllablePowerPlant, cron string, mpc bool, db store.Store, loc *time.Location, steps int, opts ...Option) (*Temporal, error) {
+func New(_ context.Context, logger *slog.Logger, em *emhass2.Emhass, c client.Client, tariffs provider.RateFetcher, sa scheduler.ControllablePowerPlant, cron string, mpc bool, db store.Store, loc *time.Location, steps int, opts ...Option) (*Temporal, error) {
 	s := c.ScheduleClient()
 	i, err := inverter.New(s, db, sa)
 	if err != nil {
 		return nil, err
 	}
-	f := emhass.New(s, tariffs, sa.GetCurrentSOC, http.Client{Timeout: 60 * time.Second}, db, steps)
+	f := emhass.New(s, tariffs, sa.GetCurrentSOC, em, db, steps)
 	t := &Temporal{
 		logger:  logger,
 		c:       c,
@@ -238,7 +238,7 @@ func (fs *Temporal) setUpForecastWorkflows(ctx context.Context) error {
 		ID:        scheduleID,
 		Workflow:  fs.f.ForecastWorkflow,
 		TaskQueue: emhass.TaskQueue,
-		Args:      []interface{}{"http://localhost:8123", "http://localhost:8123"},
+		Args:      []interface{}{"http://localhost:8123"},
 		RetryPolicy: &temporal2.RetryPolicy{
 			MaximumAttempts: 10,
 			InitialInterval: time.Second * 30,
