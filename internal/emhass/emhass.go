@@ -166,7 +166,7 @@ func ReadOptimizationResults(logger *slog.Logger, reader *bufio.Scanner, forecas
 			logger.Info("headers mapped", slog.Any("headerMapping", headerMapping))
 			for _, header := range OptimHeaders {
 				if _, ok := headerMapping[header]; !ok {
-					return nil, ErrColumnNotFound
+					logger.Warn("optional column absent from emhass output", slog.String("column", header))
 				}
 			}
 			continue
@@ -223,16 +223,22 @@ func OptimizationFromString(logger *slog.Logger, mapping map[string]int, line st
 		return OptimizationResult{}, err
 	}
 
-	logger.Info("reading", slog.String("key", p_batt))
-	pBatt, err := strconv.ParseFloat(r[mapping[p_batt]], 64)
-	if err != nil {
-		return OptimizationResult{}, err
+	var pBatt float64
+	if idx, ok := mapping[p_batt]; ok {
+		logger.Info("reading", slog.String("key", p_batt))
+		pBatt, err = strconv.ParseFloat(r[idx], 64)
+		if err != nil {
+			return OptimizationResult{}, err
+		}
 	}
 
-	logger.Info("reading", slog.String("key", soc_opt))
-	socOpt, err := strconv.ParseFloat(r[mapping[soc_opt]], 64)
-	if err != nil {
-		return OptimizationResult{}, err
+	var socOpt float64
+	if idx, ok := mapping[soc_opt]; ok {
+		logger.Info("reading", slog.String("key", soc_opt))
+		socOpt, err = strconv.ParseFloat(r[idx], 64)
+		if err != nil {
+			return OptimizationResult{}, err
+		}
 	}
 
 	logger.Info("reading", slog.String("key", unit_load_cost))
