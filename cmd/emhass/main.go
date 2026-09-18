@@ -81,8 +81,7 @@ func main() {
 	}
 	if *tariff {
 		if *octopusProduct != "" {
-			o := octopus.New(*octopusProduct, *octopusTariff, *dir, loc)
-			rateFetcher = o.GenerateOctopusTariff
+			rateFetcher = octopus.New(*octopusProduct, *octopusTariff, *dir, loc).GenerateOctopusTariff
 		}
 		if err = rateFetcher(*steps); err != nil {
 			logger.Warn("failed to fetch rates on start up", slog.String("error", err.Error()))
@@ -137,6 +136,10 @@ func main() {
 		if err != nil {
 			panic(err.Error())
 		}
+		em, err := emhass.New(logger, db, *emhassUrl, *dir)
+		if err != nil {
+			panic(err.Error())
+		}
 		if *useTemporal {
 			temporalClient, err := temporal.NewClient(logger.With(slog.String("pkg", "temporal")), *temporalAddress, *temporalNamespace, *temporalTLS)
 			if err != nil {
@@ -149,17 +152,14 @@ func main() {
 				temporalOpts = append(temporalOpts, temporal.WithInitOnStart())
 			}
 
-			temporalScheduler, err := temporal.New(sigkillCtx, logger, c, rateFetcher, sa, *temporalSchedule, *mpc, db, loc, *steps, temporalOpts...)
+			temporalScheduler, err := temporal.New(sigkillCtx, logger, em, c, rateFetcher, sa, *temporalSchedule, *mpc, db, loc, *steps, temporalOpts...)
 			if err != nil {
 				panic(err.Error())
 			}
 			sch = temporalScheduler
 		}
 		ha := hass.New(logger, rateFetcher, querier, *steps)
-		em, err := emhass.New(logger, db, *emhassUrl, *dir)
-		if err != nil {
-			panic(err.Error())
-		}
+
 		srv := s.NewServer(sigkillCtx, logger, ha, *password, db.Select, sch, loc, em, sa)
 		errGrp, ctx := errgroup.WithContext(sigkillCtx)
 		errGrp.Go(func() error {
