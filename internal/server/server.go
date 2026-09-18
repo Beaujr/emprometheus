@@ -1,25 +1,21 @@
 package server
 
 import (
-	"bufio"
 	"context"
 	"embed"
 	"encoding/json"
-	"fmt"
+	"github.com/beaujr/emprometheus/internal/emhass"
+	"github.com/beaujr/emprometheus/internal/store"
 	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
-	"github.com/beaujr/emprometheus/internal/emhass"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/server/hass"
-	"github.com/beaujr/emprometheus/internal/store"
 )
 
 //go:embed templates/*.html
@@ -28,22 +24,22 @@ var templateFS embed.FS
 type Server struct {
 	logger    *slog.Logger
 	ha        *hass.Hass
-	dir       string
 	scheduler scheduler.Scheduler
-	db        store.Store
+	em        *emhass.Emhass
 	spp       scheduler.SimplePowerPlant
+	schedules store.Select
 	password  string
 }
 
-func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, dir, password string, scheduler scheduler.Scheduler, loc *time.Location, db store.Store, plant scheduler.SimplePowerPlant) *http.Server {
+func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, password string, schedules store.Select, scheduler scheduler.Scheduler, loc *time.Location, em *emhass.Emhass, plant scheduler.SimplePowerPlant) *http.Server {
 	s := &Server{
 		logger:    logger,
 		ha:        ha,
-		dir:       dir,
 		scheduler: scheduler,
-		db:        db,
+		em:        em,
 		spp:       plant,
 		password:  password,
+		schedules: schedules,
 	}
 
 	mux := http.NewServeMux()
@@ -73,39 +69,20 @@ func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, dir, pas
 		return
 	})
 	mux.HandleFunc("/action/{forecast}", func(w http.ResponseWriter, r *http.Request) {
-		c := http.Client{Timeout: 10 * time.Second}
-		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:5000%s", r.URL.Path), r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-		resp, err := c.Do(req)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
 		fm := r.PathValue("forecast")
-		logger := s.logger.With(slog.String("file", filepath.Join(dir, provider.CSVForecastName)))
-		if err = s.copyFile(logger, dir, provider.CSVForecastName, fm); err != nil {
-			logger.Error("error reading file", slog.String("error", err.Error()))
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		err = s.em.Forecast(fm, string(body))
+		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
-		_, err = io.Copy(w, resp.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
 
 	})
 
@@ -178,7 +155,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, dir, pas
 			0, 0, 0, 0,
 			time.Now().Location(),
 		)
-		rows, err := db.Select(startOfToday)
+		rows, err := s.schedules(startOfToday)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
@@ -202,33 +179,4 @@ func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, dir, pas
 	srv := http.Server{Addr: ":8123", Handler: mux}
 
 	return &srv
-}
-
-func (s *Server) copyFile(logger *slog.Logger, dir, src, forecastMethod string) error {
-	optimizationFile := filepath.Join(dir, src)
-	logger.Info("opening file")
-	sourceFile, err := os.Open(optimizationFile)
-	if err != nil {
-		return err
-	}
-	defer sourceFile.Close()
-	_, err = sourceFile.Seek(0, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	reader := bufio.NewScanner(sourceFile)
-	logger.Info("reading file")
-	results, err := emhass.ReadOptimizationResults(logger, reader, forecastMethod)
-	if err != nil {
-		return err
-	}
-	logger.Info("reading finished", slog.Int("rows", len(results)))
-	for _, o := range results {
-		err = s.db.InsertOptimization(o)
-		if err != nil {
-			logger.Error("failed inserting optimization", slog.String("error", err.Error()))
-			return err
-		}
-	}
-	return nil
 }
