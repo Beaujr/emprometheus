@@ -5,14 +5,16 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/beaujr/emprometheus/internal/types"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/beaujr/emprometheus/internal/emhass"
 )
 
-type Find = func(time.Time) (Row, error)
+type (
+	Find   = func(time.Time) (Row, error)
+	Select = func(start time.Time) ([]Row, error)
+)
 
 var ErrNotFound = errors.New("not found")
 
@@ -27,8 +29,8 @@ type OptimizationStore interface {
 	Insert(Row) error
 	Upsert(row Row) error
 	Delete(row Row) error
-	InsertOptimization(emhass.OptimizationResult) error
-	SelectOptimization(start time.Time, optimization string) ([]emhass.OptimizationResult, error)
+	InsertOptimization(types.OptimizationResult) error
+	SelectOptimization(start time.Time, optimization string) ([]types.OptimizationResult, error)
 	DeleteAnyOptimization(start time.Time) error
 }
 

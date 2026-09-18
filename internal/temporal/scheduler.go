@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	optim "github.com/beaujr/emprometheus/internal/emhass"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/store"
 	"github.com/beaujr/emprometheus/internal/temporal/emhass"
 	"github.com/beaujr/emprometheus/internal/temporal/inverter"
+	optim "github.com/beaujr/emprometheus/internal/types"
 	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
