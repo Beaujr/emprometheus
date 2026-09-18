@@ -19,20 +19,17 @@ var (
 )
 
 const (
-	optimization = "optimization"
-	timestamp    = "timestamp"
-	p_PV         = "P_PV"
-	p_Load       = "P_Load"
-	p_grid_pos   = "P_grid_pos"
-	p_grid_neg   = "P_grid_neg"
-	p_grid       = "P_grid"
-	p_batt       = "P_batt"
-	soc_opt      = "SOC_opt"
-	//soc_deficit_cost = "soc_deficit_cost"
+	optimization    = "optimization"
+	timestamp       = "timestamp"
+	p_PV            = "P_PV"
+	p_Load          = "P_Load"
+	p_grid_pos      = "P_grid_pos"
+	p_grid_neg      = "P_grid_neg"
+	p_grid          = "P_grid"
+	p_batt          = "P_batt"
+	soc_opt         = "SOC_opt"
 	unit_load_cost  = "unit_load_cost"
 	unit_prod_price = "unit_prod_price"
-	//maximum_power_from_grid = "maximum_power_from_grid"
-	//maximum_power_to_grid = "maximum_power_to_grid"
 	cost_profit     = "cost_profit"
 	cost_fun_cost   = "cost_fun_cost"
 	cost_fun_profit = "cost_fun_profit"
@@ -150,10 +147,6 @@ func ReadOptimizationResults(logger *slog.Logger, reader *bufio.Scanner, forecas
 			logger.Info("headers mapped", slog.Any("headerMapping", headerMapping))
 			for _, header := range OptimHeaders {
 				if _, ok := headerMapping[header]; !ok {
-					// cost fun headers depend on config
-					if strings.HasPrefix(header, "cost_fun") {
-
-					}
 					return nil, ErrColumnNotFound
 				}
 			}
