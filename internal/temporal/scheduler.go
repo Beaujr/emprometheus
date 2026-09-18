@@ -485,12 +485,3 @@ func GetCommands(rows []optim.OptimizationResult) []Schedule {
 
 	return commands
 }
-
-type Row struct {
-	Timestamp time.Time
-	PPV       float64
-	Load      float64
-	PBatt     float64
-	SOC       float64
-	Price     float64
-}
