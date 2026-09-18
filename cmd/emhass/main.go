@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -63,8 +62,6 @@ func (bat *basicAuthTransport) RoundTrip(req *http.Request) (*http.Response, err
 	return bat.Transport.RoundTrip(req)
 }
 
-var psqldb *sql.DB
-
 func main() {
 	flag.Parse()
 	sigkillCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
@@ -116,7 +113,7 @@ func main() {
 		// use filestore by default
 		storeOpts := []store.Option{store.WithFilestore(*dir, provider.CSVScheduleName)}
 		if *dsn != "" {
-			psqldb, err = postgres.New(*dsn)
+			psqldb, err := postgres.New(*dsn)
 			if err != nil {
 				panic(err.Error())
 			}

@@ -3,7 +3,6 @@ package emhass
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"net/http"
 	"strings"
@@ -22,10 +21,6 @@ const (
 	TaskQueue     = "emhassforecastqueue"
 	WorkflowIdMPC = "emhassmpc"
 	TaskQueueMPC  = "emhassmpcqueue"
-)
-
-var (
-	soc = flag.String("soc", "battery_soc", "the prometheus battery SOC metric")
 )
 
 type Forecaster struct {
