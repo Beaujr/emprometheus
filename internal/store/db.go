@@ -199,10 +199,7 @@ ON CONFLICT (time) DO UPDATE SET
 		row.StopDischargeSOC,
 		row.TargetSOC,
 	)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (p PostgresStore) Find(t time.Time) (Row, error) {
@@ -410,33 +407,20 @@ func (p PostgresStore) GetDeviceMode() (string, error) {
 }
 
 func (p PostgresStore) SetBatteryFirstGridChargeTarget(enabled string) error {
-	err := p.setField(StateTarget, "grid_charge", enabled)
-	if err != nil {
-		return err
-	}
-	return nil
+	return p.setField(StateTarget, "grid_charge", enabled)
 }
 
 func (p PostgresStore) SetSOCTarget(soc int64) error {
-	err := p.setField(StateTarget, "soc", soc)
-	if err != nil {
+	if err := p.setField(StateTarget, "soc", soc); err != nil {
 		return err
 	}
 	// set the load_first_stop_discharge to same as target SoC
 	// this is because we want to charge to the target soc
-	err = p.setField(StateTarget, "load_first_stop_discharge", soc)
-	if err != nil {
-		return err
-	}
-	return nil
+	return p.setField(StateTarget, "load_first_stop_discharge", soc)
 }
 
 func (p PostgresStore) SetDeviceModeTarget(mode string) error {
-	err := p.setField(StateTarget, "device_mode", mode)
-	if err != nil {
-		return err
-	}
-	return nil
+	return p.setField(StateTarget, "device_mode", mode)
 }
 
 func (p PostgresStore) GetBatteryFirstGridChargeTarget() (string, error) {
@@ -476,9 +460,5 @@ func (p PostgresStore) GetLoadFirstStopDischarge() (int64, error) {
 }
 
 func (p PostgresStore) SetLoadFirstStopDischarge(soc int64) error {
-	err := p.setField(StateCurrent, "load_first_stop_discharge", soc)
-	if err != nil {
-		return err
-	}
-	return nil
+	return p.setField(StateCurrent, "load_first_stop_discharge", soc)
 }
