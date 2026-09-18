@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/beaujr/emprometheus/internal/emhass"
 	"log"
 	"log/slog"
 	"net/http"
@@ -44,6 +45,7 @@ var (
 	temporalAddress        = flag.String("temporal.address", "temporal-frontend-headless.temporal.svc.cluster.local:7233", "temporal address")
 	temporalSchedule       = flag.String("temporal.schedule", "2 11,23 * * *", "temporal schedule")
 	temporalTLS            = flag.Bool("temporal.tls", false, "TLS connection for temporal client")
+	emhassUrl              = flag.String("emhass.url", "http://localhost:5000/action", "use mpc or just rely on forecast")
 	mpc                    = flag.Bool("mpc", false, "use mpc or just rely on forecast")
 	createSchedulesOnStart = flag.Bool("init", true, "create schedules on application start")
 	dsn                    = flag.String("dsn", "", "postgres DSN if using database to store schedules")
@@ -79,8 +81,7 @@ func main() {
 	}
 	if *tariff {
 		if *octopusProduct != "" {
-			o := octopus.New(*octopusProduct, *octopusTariff, *dir, loc)
-			rateFetcher = o.GenerateOctopusTariff
+			rateFetcher = octopus.New(*octopusProduct, *octopusTariff, *dir, loc).GenerateOctopusTariff
 		}
 		if err = rateFetcher(*steps); err != nil {
 			logger.Warn("failed to fetch rates on start up", slog.String("error", err.Error()))
@@ -135,6 +136,10 @@ func main() {
 		if err != nil {
 			panic(err.Error())
 		}
+		em, err := emhass.New(logger, db, *emhassUrl, *dir)
+		if err != nil {
+			panic(err.Error())
+		}
 		if *useTemporal {
 			temporalClient, err := temporal.NewClient(logger.With(slog.String("pkg", "temporal")), *temporalAddress, *temporalNamespace, *temporalTLS)
 			if err != nil {
@@ -147,14 +152,15 @@ func main() {
 				temporalOpts = append(temporalOpts, temporal.WithInitOnStart())
 			}
 
-			temporalScheduler, err := temporal.New(sigkillCtx, logger, c, rateFetcher, sa, *temporalSchedule, *mpc, db, loc, *steps, temporalOpts...)
+			temporalScheduler, err := temporal.New(sigkillCtx, logger, em, c, rateFetcher, sa, *temporalSchedule, *mpc, db, loc, *steps, temporalOpts...)
 			if err != nil {
 				panic(err.Error())
 			}
 			sch = temporalScheduler
 		}
 		ha := hass.New(logger, rateFetcher, querier, *steps)
-		srv := s.NewServer(sigkillCtx, logger, ha, *dir, *password, sch, loc, db, sa)
+
+		srv := s.NewServer(sigkillCtx, logger, ha, *password, db.Select, sch, loc, em, sa)
 		errGrp, ctx := errgroup.WithContext(sigkillCtx)
 		errGrp.Go(func() error {
 			if err = sch.Start(ctx); err != nil {
