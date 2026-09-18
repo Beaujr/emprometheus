@@ -1,22 +1,19 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
+	"github.com/beaujr/emprometheus/internal/emhass"
 	"hash/fnv"
-	"io"
 	"log/slog"
 	"math/rand"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 	_ "time/tzdata"
 
-	"github.com/beaujr/emprometheus/internal/emhass"
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/provider/octopus"
 	"github.com/beaujr/emprometheus/internal/server/hass"
@@ -25,7 +22,7 @@ import (
 )
 
 var (
-	emhassUrl = flag.String("emhass_url", "http://localhost:5000", "Emhass")
+	emhassUrl = flag.String("emhass_url", "http://localhost:5000/action/", "Emhass")
 	dir       = flag.String("dir", "./emhass_config/data", "the directory to serve files from")
 )
 
@@ -51,51 +48,13 @@ func main() {
 			panic(err)
 		}
 	}()
-	c := http.Client{Timeout: 60 * time.Second}
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/action/dayahead-optim", *emhassUrl), nil)
+	em, err := emhass.New(logger, db, *emhassUrl, *dir)
 	if err != nil {
 		panic(err)
 	}
-	resp, err := c.Do(req)
+	err = em.Forecast("dayahead-optim", "")
 	if err != nil {
 		panic(err)
-	}
-	defer func(Body io.ReadCloser) {
-		err = Body.Close()
-		if err != nil {
-			logger.Error(err.Error())
-		}
-	}(resp.Body)
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		panic(fmt.Errorf("unexpected status code: %d", resp.StatusCode))
-	}
-	optimizationFile := filepath.Join(*dir, provider.CSVForecastName)
-	logger.Info("opening file")
-	sourceFile, err := os.Open(optimizationFile)
-	if err != nil {
-		panic(err)
-	}
-	defer func(sourceFile *os.File) {
-		err = sourceFile.Close()
-		if err != nil {
-			logger.Error(err.Error())
-		}
-	}(sourceFile)
-	_, err = sourceFile.Seek(0, io.SeekStart)
-	if err != nil {
-		panic(err)
-	}
-	reader := bufio.NewScanner(sourceFile)
-	results, err := emhass.ReadOptimizationResults(logger, reader, provider.ActionForecast)
-	if err != nil {
-		panic(err)
-	}
-	logger.Info("reading finished", slog.Int("rows", len(results)))
-
-	for _, o := range results {
-		if err = db.InsertOptimization(o); err != nil {
-			panic(err)
-		}
 	}
 
 	stored, err := db.SelectOptimization(time.Now().Add(-24*time.Hour), provider.ActionForecast)

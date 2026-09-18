@@ -4,14 +4,13 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"github.com/beaujr/emprometheus/internal/types"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/beaujr/emprometheus/internal/emhass"
 )
 
 // fileState is the JSON-serialised inverter settings persisted by FileStore.
@@ -126,28 +125,28 @@ func (f *FileStore) writeLines(path string, lines []string) error {
 
 // parseOptimizationLine parses a line in the format produced by
 // OptimizationResult.String() (fixed 14-column CSV).
-func parseOptimizationLine(line string) (emhass.OptimizationResult, error) {
+func parseOptimizationLine(line string) (types.OptimizationResult, error) {
 	r := csv.NewReader(strings.NewReader(line))
 	record, err := r.Read()
 	if err != nil {
-		return emhass.OptimizationResult{}, err
+		return types.OptimizationResult{}, err
 	}
 	if len(record) < 14 {
-		return emhass.OptimizationResult{}, fmt.Errorf("expected 14 fields, got %d", len(record))
+		return types.OptimizationResult{}, fmt.Errorf("expected 14 fields, got %d", len(record))
 	}
 	t, err := time.Parse("2006-01-02 15:04:05-07:00", record[1])
 	if err != nil {
-		return emhass.OptimizationResult{}, fmt.Errorf("parse time: %w", err)
+		return types.OptimizationResult{}, fmt.Errorf("parse time: %w", err)
 	}
 	indices := [11]int{2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
 	var vals [11]float64
 	for i, idx := range indices {
 		vals[i], err = strconv.ParseFloat(record[idx], 64)
 		if err != nil {
-			return emhass.OptimizationResult{}, fmt.Errorf("parse field %d: %w", idx, err)
+			return types.OptimizationResult{}, fmt.Errorf("parse field %d: %w", idx, err)
 		}
 	}
-	return emhass.NewOptimizationResultFull(
+	return types.NewOptimizationResultFull(
 		record[0], t,
 		vals[0], vals[1], vals[2], vals[3], vals[4], vals[5],
 		vals[6], vals[7], vals[8], vals[9], vals[10],
@@ -157,7 +156,7 @@ func parseOptimizationLine(line string) (emhass.OptimizationResult, error) {
 
 // ── OptimizationStore ─────────────────────────────────────────────────────────
 
-func (f *FileStore) InsertOptimization(row emhass.OptimizationResult) error {
+func (f *FileStore) InsertOptimization(row types.OptimizationResult) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	lines, err := f.readLines(f.optimpath)
@@ -180,14 +179,14 @@ func (f *FileStore) InsertOptimization(row emhass.OptimizationResult) error {
 	return f.writeLines(f.optimpath, lines)
 }
 
-func (f *FileStore) SelectOptimization(start time.Time, optimization string) ([]emhass.OptimizationResult, error) {
+func (f *FileStore) SelectOptimization(start time.Time, optimization string) ([]types.OptimizationResult, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	lines, err := f.readLines(f.optimpath)
 	if err != nil {
 		return nil, err
 	}
-	var results []emhass.OptimizationResult
+	var results []types.OptimizationResult
 	for _, line := range lines {
 		row, err := parseOptimizationLine(line)
 		if err != nil {

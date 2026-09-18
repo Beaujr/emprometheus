@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/beaujr/emprometheus/internal/emhass"
 	"log"
 	"log/slog"
 	"net/http"
@@ -44,6 +45,7 @@ var (
 	temporalAddress        = flag.String("temporal.address", "temporal-frontend-headless.temporal.svc.cluster.local:7233", "temporal address")
 	temporalSchedule       = flag.String("temporal.schedule", "2 11,23 * * *", "temporal schedule")
 	temporalTLS            = flag.Bool("temporal.tls", false, "TLS connection for temporal client")
+	emhassUrl              = flag.String("emhass.url", "http://localhost:5000/action", "use mpc or just rely on forecast")
 	mpc                    = flag.Bool("mpc", false, "use mpc or just rely on forecast")
 	createSchedulesOnStart = flag.Bool("init", true, "create schedules on application start")
 	dsn                    = flag.String("dsn", "", "postgres DSN if using database to store schedules")
@@ -154,7 +156,11 @@ func main() {
 			sch = temporalScheduler
 		}
 		ha := hass.New(logger, rateFetcher, querier, *steps)
-		srv := s.NewServer(sigkillCtx, logger, ha, *dir, *password, sch, loc, db, sa)
+		em, err := emhass.New(logger, db, *emhassUrl, *dir)
+		if err != nil {
+			panic(err.Error())
+		}
+		srv := s.NewServer(sigkillCtx, logger, ha, *password, db.Select, sch, loc, em, sa)
 		errGrp, ctx := errgroup.WithContext(sigkillCtx)
 		errGrp.Go(func() error {
 			if err = sch.Start(ctx); err != nil {

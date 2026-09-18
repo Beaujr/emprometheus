@@ -1,4 +1,4 @@
-package emhass
+package types
 
 import (
 	"bufio"
@@ -86,12 +86,6 @@ func TestOptimizationFromString(t *testing.T) {
 					var parseErr *time.ParseError
 					if !errors.As(err, &parseErr) {
 						t.Fatalf("expected time.ParseError got %T", err)
-					}
-				default:
-					if tt.wantErr == ErrNotFound {
-						if !errors.Is(err, tt.wantErr) {
-							t.Fatalf("expected error %v got %v", tt.wantErr, err)
-						}
 					}
 				}
 
