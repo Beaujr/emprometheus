@@ -103,14 +103,25 @@ emhass_resources:
      cpu: 100m
      memory: 300Mi
 
-#livenessProbe:
-#  httpGet:
-#    path: /
-#    port: http
-#readinessProbe:
-#  httpGet:
-#    path: /
-#    port: http
+# Startup probe for the emhass sidecar. Main containers will not start until
+# emhass passes this probe. Total wait = failureThreshold × periodSeconds (150 s).
+emhass_startupProbe:
+  failureThreshold: 30
+  periodSeconds: 5
+
+# Probes for the promhass main container.
+promhass_livenessProbe:
+  httpGet:
+    path: /
+    port: promhasshttp
+  initialDelaySeconds: 5
+  periodSeconds: 30
+promhass_readinessProbe:
+  httpGet:
+    path: /
+    port: promhasshttp
+  initialDelaySeconds: 5
+  periodSeconds: 10
 
 autoscaling:
   enabled: false
