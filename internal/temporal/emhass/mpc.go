@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/beaujr/emprometheus/internal/provider"
@@ -39,7 +38,7 @@ func (f *Forecaster) MPCWorkflow(ctx workflow.Context, emhassUrl, emprometheusUr
 		return "", err
 	}
 	var result int
-	err = workflow.ExecuteActivity(ctx, f.MPCActivity, emhassUrl, batterySOC, finalSOC).Get(ctx, &result)
+	err = workflow.ExecuteActivity(ctx, f.MPCActivity, batterySOC, finalSOC).Get(ctx, &result)
 	if err != nil {
 		if errors.Is(err, provider.TariffNotAvailable) {
 			return "Not Ready", nil
@@ -105,25 +104,21 @@ func (f *Forecaster) GetHorizonSOCActivity(_ context.Context) (float64, error) {
 
 }
 
-func (f *Forecaster) MPCActivity(ctx context.Context, emhassUrl string, currentSoc, finalSoc float64) (int, error) {
+func (f *Forecaster) MPCActivity(ctx context.Context, currentSoc, finalSoc float64) error {
 	defer func() {
 		if err := recover(); err != nil {
 			return
 		}
 	}()
 	if err := f.tariff(f.steps); err != nil {
-		return 0, err
+		return err
 	}
 
 	payload := fmt.Sprintf("{\"soc_init\": %.2f, \"prediction_horizon\": %d, \"soc_final\": %.2f}", currentSoc/100, f.horizon, finalSoc)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/action/%s", emhassUrl, provider.ActionMPC), strings.NewReader(payload))
-	if err != nil {
-		return 0, err
-	}
 
-	resp, err := f.c.Do(req)
+	err := f.em.Forecast(provider.ActionMPC, payload)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return resp.StatusCode, nil
+	return nil
 }
