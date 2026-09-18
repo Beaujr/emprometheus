@@ -12,7 +12,6 @@ import (
 
 type Reporter interface {
 	GetRange(ctx context.Context, query string, start, end time.Time, step time.Duration) (model.Matrix, error)
-	//Query(ctx context.Context, query string, ts time.Time, opts ...v1.Option) (model.Value, v1.Warnings, error)
 }
 
 var ErrNoRows = errors.New("no rows in result set")
@@ -23,10 +22,6 @@ func New(api v1.API) *reporter {
 
 type reporter struct {
 	api v1.API
-}
-
-func (r *reporter) Query(ctx context.Context, query string, ts time.Time, opts ...v1.Option) (model.Value, v1.Warnings, error) {
-	return r.api.Query(ctx, query, ts, opts...)
 }
 
 func (r *reporter) GetRange(ctx context.Context, query string, start, end time.Time, step time.Duration) (model.Matrix, error) {

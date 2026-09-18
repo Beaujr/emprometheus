@@ -19,20 +19,17 @@ var (
 )
 
 const (
-	optimization = "optimization"
-	timestamp    = "timestamp"
-	p_PV         = "P_PV"
-	p_Load       = "P_Load"
-	p_grid_pos   = "P_grid_pos"
-	p_grid_neg   = "P_grid_neg"
-	p_grid       = "P_grid"
-	p_batt       = "P_batt"
-	soc_opt      = "SOC_opt"
-	//soc_deficit_cost = "soc_deficit_cost"
+	optimization    = "optimization"
+	timestamp       = "timestamp"
+	p_PV            = "P_PV"
+	p_Load          = "P_Load"
+	p_grid_pos      = "P_grid_pos"
+	p_grid_neg      = "P_grid_neg"
+	p_grid          = "P_grid"
+	p_batt          = "P_batt"
+	soc_opt         = "SOC_opt"
 	unit_load_cost  = "unit_load_cost"
 	unit_prod_price = "unit_prod_price"
-	//maximum_power_from_grid = "maximum_power_from_grid"
-	//maximum_power_to_grid = "maximum_power_to_grid"
 	cost_profit     = "cost_profit"
 	cost_fun_cost   = "cost_fun_cost"
 	cost_fun_profit = "cost_fun_profit"
@@ -77,6 +74,25 @@ func (o OptimizationResult) String() string {
 
 func NewOptimizationResult(time time.Time, socOpt, unitLoadCost, pPV, pBatt float64) OptimizationResult {
 	return OptimizationResult{time: time, socOpt: socOpt, unitLoadCost: unitLoadCost, pPV: pPV, pBatt: pBatt}
+}
+
+func NewOptimizationResultFull(optimization string, t time.Time, pPV, pLoad, pGridPos, pGridNeg, pGrid, pBatt, socOpt, unitLoadCost, unitProdPrice, costProfit, costFunProfit float64, optimStatus string) OptimizationResult {
+	return OptimizationResult{
+		Optimization:  optimization,
+		time:          t,
+		pPV:           pPV,
+		pLoad:         pLoad,
+		pGridPos:      pGridPos,
+		pGridNeg:      pGridNeg,
+		pGrid:         pGrid,
+		pBatt:         pBatt,
+		socOpt:        socOpt,
+		unitLoadCost:  unitLoadCost,
+		unitProdPrice: unitProdPrice,
+		costProfit:    costProfit,
+		costFunProfit: costFunProfit,
+		optimStatus:   optimStatus,
+	}
 }
 
 func (o OptimizationResult) Time() time.Time {
@@ -150,11 +166,7 @@ func ReadOptimizationResults(logger *slog.Logger, reader *bufio.Scanner, forecas
 			logger.Info("headers mapped", slog.Any("headerMapping", headerMapping))
 			for _, header := range OptimHeaders {
 				if _, ok := headerMapping[header]; !ok {
-					// cost fun headers depend on config
-					if strings.HasPrefix(header, "cost_fun") {
-
-					}
-					return nil, ErrColumnNotFound
+					logger.Warn("optional column absent from emhass output", slog.String("column", header))
 				}
 			}
 			continue
@@ -211,16 +223,22 @@ func OptimizationFromString(logger *slog.Logger, mapping map[string]int, line st
 		return OptimizationResult{}, err
 	}
 
-	logger.Info("reading", slog.String("key", p_batt))
-	pBatt, err := strconv.ParseFloat(r[mapping[p_batt]], 64)
-	if err != nil {
-		return OptimizationResult{}, err
+	var pBatt float64
+	if idx, ok := mapping[p_batt]; ok {
+		logger.Info("reading", slog.String("key", p_batt))
+		pBatt, err = strconv.ParseFloat(r[idx], 64)
+		if err != nil {
+			return OptimizationResult{}, err
+		}
 	}
 
-	logger.Info("reading", slog.String("key", soc_opt))
-	socOpt, err := strconv.ParseFloat(r[mapping[soc_opt]], 64)
-	if err != nil {
-		return OptimizationResult{}, err
+	var socOpt float64
+	if idx, ok := mapping[soc_opt]; ok {
+		logger.Info("reading", slog.String("key", soc_opt))
+		socOpt, err = strconv.ParseFloat(r[idx], 64)
+		if err != nil {
+			return OptimizationResult{}, err
+		}
 	}
 
 	logger.Info("reading", slog.String("key", unit_load_cost))

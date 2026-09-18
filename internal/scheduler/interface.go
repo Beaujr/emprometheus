@@ -27,7 +27,6 @@ type ControllablePowerPlant interface {
 	SimplePowerPlant
 	SetBatteryFirstGridCharge(enabled string) error
 	SetWorkModePriority(workmode string) error
-	//SetLoadFirstStopDischarge(soc int64) error
 	SetLoadFirstStopDischargeState(soc int64) error
 	SetCurrentSOC(soc int64) error
 	GetCurrentSOC() (int64, error)
