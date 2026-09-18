@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/beaujr/emprometheus/internal/emhass"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/beaujr/emprometheus/internal/provider"
@@ -27,17 +27,17 @@ type Forecaster struct {
 	tariff  provider.RateFetcher
 	s       client.ScheduleClient
 	getSoc  func() (int64, error)
-	c       http.Client
+	em      *emhass.Emhass
 	horizon int64
 	db      store.MinimalStore
 	steps   int
 }
 
-func New(s client.ScheduleClient, tariff provider.RateFetcher, getSoc func() (int64, error), c http.Client, db store.Store, steps int) *Forecaster {
-	return &Forecaster{tariff: tariff, s: s, getSoc: getSoc, c: c, horizon: 6, db: db, steps: steps}
+func New(s client.ScheduleClient, tariff provider.RateFetcher, getSoc func() (int64, error), em *emhass.Emhass, db store.Store, steps int) *Forecaster {
+	return &Forecaster{tariff: tariff, s: s, getSoc: getSoc, em: em, horizon: 6, db: db, steps: steps}
 }
 
-func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emhassUrl, emprometheusUrl string) (string, error) {
+func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emprometheusUrl string) (string, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -47,10 +47,10 @@ func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emhassUrl, emprometh
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 	logger := workflow.GetLogger(ctx)
-	logger.Info("forecast workflow started", "url", emhassUrl)
+	logger.Info("forecast workflow started")
 
 	var result int
-	err := workflow.ExecuteActivity(ctx, f.ForecastActivity, emhassUrl).Get(ctx, &result)
+	err := workflow.ExecuteActivity(ctx, f.ForecastActivity).Get(ctx, &result)
 	if err != nil {
 		if errors.Is(err, provider.TariffNotAvailable) {
 			return "Not Ready", nil
@@ -72,20 +72,16 @@ func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emhassUrl, emprometh
 	return "OK", nil
 }
 
-func (f *Forecaster) ForecastActivity(ctx context.Context, emhassUrl string) (int, error) {
+func (f *Forecaster) ForecastActivity(ctx context.Context) error {
 	if err := f.tariff(f.steps); err != nil {
-		return 0, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/action/%s", emhassUrl, provider.ActionForecast), strings.NewReader("{\"publish_prefix\":\"dh_\"}"))
-	if err != nil {
-		return 0, err
+		return err
 	}
 
-	resp, err := f.c.Do(req)
-	if err != nil {
-		return 0, err
+	if err := f.em.Forecast(provider.ActionForecast, "{\"publish_prefix\":\"dh_\"}"); err != nil {
+		return err
 	}
-	return resp.StatusCode, nil
+
+	return nil
 }
 
 func (f *Forecaster) BuildScheduleActivity(ctx context.Context, emprometheus, forecastMethod string) (int, error) {
@@ -94,7 +90,8 @@ func (f *Forecaster) BuildScheduleActivity(ctx context.Context, emprometheus, fo
 		return 0, err
 	}
 	req.Header.Set("forecast-method", forecastMethod)
-	resp, err := f.c.Do(req)
+	c := &http.Client{Timeout: 40 * time.Second}
+	resp, err := c.Do(req)
 	if err != nil {
 		return 0, err
 	}
