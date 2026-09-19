@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/emhass"
 	"net/http"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/emhass"
 
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/store"
@@ -49,8 +50,7 @@ func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emprometheusUrl stri
 	logger := workflow.GetLogger(ctx)
 	logger.Info("forecast workflow started")
 
-	var result int
-	err := workflow.ExecuteActivity(ctx, f.ForecastActivity).Get(ctx, &result)
+	err := workflow.ExecuteActivity(ctx, f.ForecastActivity).Get(ctx, nil)
 	if err != nil {
 		if errors.Is(err, provider.TariffNotAvailable) {
 			return "Not Ready", nil
@@ -58,16 +58,10 @@ func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emprometheusUrl stri
 		logger.Error("Activity failed.", "Error", err)
 		return "", err
 	}
-	if result != http.StatusCreated {
-		return "", errors.New("failed ForecastActivity")
-	}
-	err = workflow.ExecuteActivity(ctx, f.BuildScheduleActivity, emprometheusUrl, provider.ActionForecast).Get(ctx, &result)
+	err = workflow.ExecuteActivity(ctx, f.BuildScheduleActivity, emprometheusUrl, provider.ActionForecast).Get(ctx, nil)
 	if err != nil {
 		logger.Error("Activity failed.", "Error", err)
 		return "", err
-	}
-	if result != http.StatusOK {
-		return "", errors.New("failed BuildScheduleActivity")
 	}
 	return "OK", nil
 }
