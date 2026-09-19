@@ -2,9 +2,6 @@ package emhass
 
 import (
 	"bufio"
-	"github.com/beaujr/emprometheus/internal/provider"
-	"github.com/beaujr/emprometheus/internal/store"
-	"github.com/beaujr/emprometheus/internal/types"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,6 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/provider"
+	"github.com/beaujr/emprometheus/internal/store"
+	"github.com/beaujr/emprometheus/internal/types"
 )
 
 type Emhass struct {
@@ -32,7 +33,7 @@ func New(logger *slog.Logger, db store.Store, baseURL, dir string) (*Emhass, err
 
 func (e *Emhass) Forecast(forecastMethod, body string) error {
 	forecastURL := e.baseUrl.ResolveReference(&url.URL{Path: filepath.Join(e.baseUrl.Path, forecastMethod)})
-	c := http.Client{Timeout: 10 * time.Second}
+	c := http.Client{Timeout: 60 * time.Second}
 	req, err := http.NewRequest(http.MethodPost, forecastURL.String(), strings.NewReader(body))
 	if err != nil {
 		return err
