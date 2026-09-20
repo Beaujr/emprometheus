@@ -5,11 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	emhass2 "github.com/beaujr/emprometheus/internal/emhass"
 	"log/slog"
 	"slices"
 	"strings"
 	"time"
+
+	emhass2 "github.com/beaujr/emprometheus/internal/emhass"
 
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
@@ -112,12 +113,11 @@ func New(_ context.Context, logger *slog.Logger, em *emhass2.Emhass, c client.Cl
 	if err != nil {
 		return nil, err
 	}
-	f := emhass.New(s, tariffs, sa.GetCurrentSOC, em, db, steps)
 	t := &Temporal{
 		logger:  logger,
 		c:       c,
 		s:       s,
-		f:       f,
+		f:       nil,
 		i:       i,
 		cron:    cron,
 		tariffs: tariffs,
@@ -125,6 +125,8 @@ func New(_ context.Context, logger *slog.Logger, em *emhass2.Emhass, c client.Cl
 		db:      db,
 		loc:     loc,
 	}
+	f := emhass.New(tariffs, sa.GetCurrentSOC, t.Run, em, db, steps)
+	t.f = f
 	for _, opt := range opts {
 		opt(t)
 	}
@@ -196,7 +198,7 @@ func (fs *Temporal) setUpMPCWorkflows(ctx context.Context) error {
 		ID:        scheduleID,
 		Workflow:  fs.f.MPCWorkflow,
 		TaskQueue: emhass.TaskQueueMPC,
-		Args:      []interface{}{"http://localhost:8123", "http://localhost:8123"},
+		Args:      nil,
 		RetryPolicy: &temporal2.RetryPolicy{
 			MaximumAttempts: 1,
 		},
@@ -238,7 +240,7 @@ func (fs *Temporal) setUpForecastWorkflows(ctx context.Context) error {
 		ID:        scheduleID,
 		Workflow:  fs.f.ForecastWorkflow,
 		TaskQueue: emhass.TaskQueue,
-		Args:      []interface{}{"http://localhost:8123"},
+		Args:      nil,
 		RetryPolicy: &temporal2.RetryPolicy{
 			MaximumAttempts: 10,
 			InitialInterval: time.Second * 30,

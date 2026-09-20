@@ -3,15 +3,12 @@ package emhass
 import (
 	"context"
 	"errors"
-	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/beaujr/emprometheus/internal/emhass"
 
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/store"
-	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 
 	"go.temporal.io/sdk/workflow"
@@ -26,19 +23,22 @@ const (
 
 type Forecaster struct {
 	tariff  provider.RateFetcher
-	s       client.ScheduleClient
 	getSoc  func() (int64, error)
 	em      *emhass.Emhass
 	horizon int64
 	db      store.MinimalStore
 	steps   int
+	run     func(ctx context.Context, method string) error
 }
 
-func New(s client.ScheduleClient, tariff provider.RateFetcher, getSoc func() (int64, error), em *emhass.Emhass, db store.Store, steps int) *Forecaster {
-	return &Forecaster{tariff: tariff, s: s, getSoc: getSoc, em: em, horizon: 6, db: db, steps: steps}
+type Run = func(ctx context.Context, method string) error
+type GetSoc = func() (int64, error)
+
+func New(tariff provider.RateFetcher, getSoc GetSoc, run Run, em *emhass.Emhass, db store.Store, steps int) *Forecaster {
+	return &Forecaster{tariff: tariff, getSoc: getSoc, run: run, em: em, horizon: 6, db: db, steps: steps}
 }
 
-func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emprometheusUrl string) (string, error) {
+func (f *Forecaster) ForecastWorkflow(ctx workflow.Context) (string, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -58,7 +58,7 @@ func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emprometheusUrl stri
 		logger.Error("Activity failed.", "Error", err)
 		return "", err
 	}
-	err = workflow.ExecuteActivity(ctx, f.BuildScheduleActivity, emprometheusUrl, provider.ActionForecast).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, f.BuildScheduleActivity, provider.ActionForecast).Get(ctx, nil)
 	if err != nil {
 		logger.Error("Activity failed.", "Error", err)
 		return "", err
@@ -78,16 +78,6 @@ func (f *Forecaster) ForecastActivity(ctx context.Context) error {
 	return nil
 }
 
-func (f *Forecaster) BuildScheduleActivity(ctx context.Context, emprometheus, forecastMethod string) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/process", emprometheus), nil)
-	if err != nil {
-		return 0, err
-	}
-	req.Header.Set("forecast-method", forecastMethod)
-	c := &http.Client{Timeout: 40 * time.Second}
-	resp, err := c.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	return resp.StatusCode, nil
+func (f *Forecaster) BuildScheduleActivity(ctx context.Context, forecastMethod string) error {
+	return f.run(ctx, forecastMethod)
 }
