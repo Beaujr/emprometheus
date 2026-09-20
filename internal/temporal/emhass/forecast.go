@@ -38,7 +38,7 @@ func New(tariff provider.RateFetcher, getSoc GetSoc, run Run, em *emhass.Emhass,
 	return &Forecaster{tariff: tariff, getSoc: getSoc, run: run, em: em, horizon: 6, db: db, steps: steps}
 }
 
-func (f *Forecaster) ForecastWorkflow(ctx workflow.Context, emprometheusUrl string) (string, error) {
+func (f *Forecaster) ForecastWorkflow(ctx workflow.Context) (string, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{

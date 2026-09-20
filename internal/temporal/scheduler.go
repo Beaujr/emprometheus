@@ -240,7 +240,7 @@ func (fs *Temporal) setUpForecastWorkflows(ctx context.Context) error {
 		ID:        scheduleID,
 		Workflow:  fs.f.ForecastWorkflow,
 		TaskQueue: emhass.TaskQueue,
-		Args:      []interface{}{"http://localhost:8123"},
+		Args:      nil,
 		RetryPolicy: &temporal2.RetryPolicy{
 			MaximumAttempts: 10,
 			InitialInterval: time.Second * 30,
