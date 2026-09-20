@@ -198,7 +198,7 @@ func (fs *Temporal) setUpMPCWorkflows(ctx context.Context) error {
 		ID:        scheduleID,
 		Workflow:  fs.f.MPCWorkflow,
 		TaskQueue: emhass.TaskQueueMPC,
-		Args:      []interface{}{"http://localhost:8123", "http://localhost:8123"},
+		Args:      nil,
 		RetryPolicy: &temporal2.RetryPolicy{
 			MaximumAttempts: 1,
 		},

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/beaujr/emprometheus/internal/provider"
@@ -14,7 +13,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-func (f *Forecaster) MPCWorkflow(ctx workflow.Context, emhassUrl, emprometheusUrl string) (string, error) {
+func (f *Forecaster) MPCWorkflow(ctx workflow.Context) (string, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -24,7 +23,7 @@ func (f *Forecaster) MPCWorkflow(ctx workflow.Context, emhassUrl, emprometheusUr
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 	logger := workflow.GetLogger(ctx)
-	logger.Info("forecast workflow started", "url", emhassUrl)
+	logger.Info("forecast workflow started")
 	// get current soc
 	v, err := f.getSoc()
 	if err != nil {
@@ -32,13 +31,12 @@ func (f *Forecaster) MPCWorkflow(ctx workflow.Context, emhassUrl, emprometheusUr
 	}
 	batterySOC := float64(v)
 	var finalSOC float64
-	err = workflow.ExecuteActivity(ctx, f.GetHorizonSOCActivity, emprometheusUrl).Get(ctx, &finalSOC)
+	err = workflow.ExecuteActivity(ctx, f.GetHorizonSOCActivity).Get(ctx, &finalSOC)
 	if err != nil {
 		logger.Error("Activity failed.", "Error", err)
 		return "", err
 	}
-	var result int
-	err = workflow.ExecuteActivity(ctx, f.MPCActivity, batterySOC, finalSOC).Get(ctx, &result)
+	err = workflow.ExecuteActivity(ctx, f.MPCActivity, batterySOC, finalSOC).Get(ctx, nil)
 	if err != nil {
 		if errors.Is(err, provider.TariffNotAvailable) {
 			return "Not Ready", nil
@@ -46,16 +44,10 @@ func (f *Forecaster) MPCWorkflow(ctx workflow.Context, emhassUrl, emprometheusUr
 		logger.Error("Activity failed.", "Error", err)
 		return "", err
 	}
-	if result != http.StatusCreated {
-		return "", errors.New("failed to forecast emhass")
-	}
-	err = workflow.ExecuteActivity(ctx, f.BuildScheduleActivity, provider.ActionMPC).Get(ctx, &result)
+	err = workflow.ExecuteActivity(ctx, f.BuildScheduleActivity, provider.ActionMPC).Get(ctx, nil)
 	if err != nil {
 		logger.Error("Activity failed.", "Error", err)
 		return "", err
-	}
-	if result != http.StatusOK {
-		return "", errors.New("failed to forecast emhass")
 	}
 
 	return "OK", nil
