@@ -49,7 +49,7 @@ func (f *Forecaster) MPCWorkflow(ctx workflow.Context, emhassUrl, emprometheusUr
 	if result != http.StatusCreated {
 		return "", errors.New("failed to forecast emhass")
 	}
-	err = workflow.ExecuteActivity(ctx, f.BuildScheduleActivity, emprometheusUrl, provider.ActionMPC).Get(ctx, &result)
+	err = workflow.ExecuteActivity(ctx, f.BuildScheduleActivity, provider.ActionMPC).Get(ctx, &result)
 	if err != nil {
 		logger.Error("Activity failed.", "Error", err)
 		return "", err
