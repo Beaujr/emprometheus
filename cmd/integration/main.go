@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/emhass"
 	"hash/fnv"
 	"log/slog"
 	"math/rand"
@@ -13,6 +12,8 @@ import (
 	"strconv"
 	"time"
 	_ "time/tzdata"
+
+	"github.com/beaujr/emprometheus/internal/emhass"
 
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/provider/octopus"
@@ -36,7 +37,7 @@ func main() {
 	}
 	defer db.Close()
 
-	var fetcher = func(_ int) error {
+	var fetcher = func(_ context.Context, _ int) error {
 		return octopus.ProduceOctopusCosyTariff(*dir)
 	}
 
@@ -52,7 +53,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = em.Forecast("dayahead-optim", "")
+	err = em.Forecast(context.Background(), "dayahead-optim", "")
 	if err != nil {
 		panic(err)
 	}

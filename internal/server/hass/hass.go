@@ -26,7 +26,7 @@ func New(logger *slog.Logger, fetcher provider.RateFetcher, p prometheus.Reporte
 }
 
 func (h *Hass) config(w http.ResponseWriter, r *http.Request) {
-	if err := h.fetcher(h.steps); err != nil {
+	if err := h.fetcher(r.Context(), h.steps); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		h.logger.Error(err.Error())

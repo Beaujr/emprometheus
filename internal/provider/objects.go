@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"errors"
 )
 
@@ -14,4 +15,4 @@ const (
 
 var TariffNotAvailable = errors.New("future tariff not available")
 
-type RateFetcher = func(steps int) error
+type RateFetcher = func(ctx context.Context, steps int) error

@@ -274,6 +274,75 @@ func (fs *Temporal) setUpForecastWorkflows(ctx context.Context) error {
 	}
 	return sch.Trigger(ctx, client.ScheduleTriggerOptions{})
 }
+
+func (fs *Temporal) scheduleForecastWorkflow(ctx context.Context, t time.Time) error {
+	fs.logger.Info("forecast")
+	action := &client.ScheduleWorkflowAction{
+		ID:        fmt.Sprintf("%s-once-off", emhass.WorkflowId),
+		Workflow:  fs.f.ForecastWorkflow,
+		TaskQueue: emhass.TaskQueue,
+		Args:      nil,
+		RetryPolicy: &temporal2.RetryPolicy{
+			MaximumAttempts: 10,
+			InitialInterval: time.Second * 30,
+		},
+	}
+	opts := client.ScheduleOptions{
+		ID: action.ID,
+		Spec: client.ScheduleSpec{
+			Calendars: []client.ScheduleCalendarSpec{
+				{
+					Year: []client.ScheduleRange{{
+						Start: t.Year(),
+						End:   t.Year(),
+					}},
+					Month: []client.ScheduleRange{{
+						Start: int(t.Month()),
+						End:   int(t.Month()),
+					}},
+					DayOfMonth: []client.ScheduleRange{{
+						Start: t.Day(),
+						End:   t.Day(),
+					}},
+					Hour: []client.ScheduleRange{{
+						Start: t.Hour(),
+						End:   t.Hour(),
+					}},
+					Minute: []client.ScheduleRange{{
+						Start: t.Minute(),
+						End:   t.Minute(),
+					}},
+					Second: []client.ScheduleRange{{
+						Start: t.Second(),
+						End:   t.Second(),
+					}},
+				},
+			},
+			EndAt: t.Add(1 * time.Second),
+		},
+		Action: action,
+	}
+	sch, err := fs.s.Create(ctx, opts)
+	if err != nil {
+		if !errors.Is(err, temporal2.ErrScheduleAlreadyRunning) {
+			return err
+		}
+		fs.logger.Warn("updating workflow schedule", slog.String("scheduleID", action.ID))
+		sch = fs.s.GetHandle(ctx, action.ID)
+		err = sch.Update(ctx, client.ScheduleUpdateOptions{DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+			input.Description.Schedule.Spec = &opts.Spec
+			input.Description.Schedule.Action = opts.Action
+			return &client.ScheduleUpdate{
+				Schedule: &input.Description.Schedule,
+			}, nil
+		}})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (fs *Temporal) process(ctx context.Context, t time.Time, workmodepriority, batteryfirstgridcharge string, soc float64) error {
 	fs.logger.Info(t.Format(time.RFC3339), slog.String("work mode", workmodepriority), slog.String("battery first gridcharge", batteryfirstgridcharge))
 
@@ -371,9 +440,12 @@ func (fs *Temporal) output(ctx context.Context, method string) error {
 	}
 	var schedules []Schedule
 	schedules = GetCommands(rows)
-
+	var lastScheduledTime time.Time
 	for _, schedule := range schedules {
 		fs.logger.Info(schedule.time.Format(time.RFC3339), slog.String("work mode", schedule.workmode), slog.String("battery first gridcharge", schedule.chargeBatteryFromGrid))
+		if schedule.time.After(lastScheduledTime) {
+			lastScheduledTime = schedule.time
+		}
 		if err = fs.db.Upsert(store.Row{
 			Optimization:     method,
 			Time:             schedule.time,
@@ -388,7 +460,11 @@ func (fs *Temporal) output(ctx context.Context, method string) error {
 			fs.logger.Warn("error", slog.String("error", err.Error()))
 		}
 	}
-	return nil
+	if lastScheduledTime.IsZero() {
+		fs.logger.Warn("No rows parsed.")
+		return nil
+	}
+	return fs.scheduleForecastWorkflow(ctx, lastScheduledTime)
 }
 
 func GetCommands(rows []optim.OptimizationResult) []Schedule {

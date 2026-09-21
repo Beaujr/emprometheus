@@ -102,13 +102,13 @@ func (f *Forecaster) MPCActivity(ctx context.Context, currentSoc, finalSoc float
 			return
 		}
 	}()
-	if err := f.tariff(f.steps); err != nil {
+	if err := f.tariff(ctx, f.steps); err != nil {
 		return err
 	}
 
 	payload := fmt.Sprintf("{\"soc_init\": %.2f, \"prediction_horizon\": %d, \"soc_final\": %.2f}", currentSoc/100, f.horizon, finalSoc)
 
-	err := f.em.Forecast(provider.ActionMPC, payload)
+	err := f.em.Forecast(ctx, provider.ActionMPC, payload)
 	if err != nil {
 		return err
 	}

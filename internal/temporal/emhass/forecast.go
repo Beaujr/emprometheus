@@ -67,11 +67,11 @@ func (f *Forecaster) ForecastWorkflow(ctx workflow.Context) (string, error) {
 }
 
 func (f *Forecaster) ForecastActivity(ctx context.Context) error {
-	if err := f.tariff(f.steps); err != nil {
+	if err := f.tariff(ctx, f.steps); err != nil {
 		return err
 	}
 
-	if err := f.em.Forecast(provider.ActionForecast, "{\"publish_prefix\":\"dh_\"}"); err != nil {
+	if err := f.em.Forecast(ctx, provider.ActionForecast, "{\"publish_prefix\":\"dh_\"}"); err != nil {
 		return err
 	}
 

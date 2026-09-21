@@ -2,7 +2,7 @@ package octopus
 
 import (
 	"bytes"
-	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/beaujr/emprometheus/internal/provider"
@@ -33,87 +32,73 @@ type Result struct {
 type Octopus struct {
 	dir, product, tariff string
 	loc                  *time.Location
+	client               *http.Client
 }
 
-func New(product, tariff, dir string, loc *time.Location) *Octopus {
-	return &Octopus{
+type Option func(*Octopus)
+
+func WithClient(c *http.Client) Option {
+	return func(o *Octopus) {
+		o.client = c
+	}
+}
+
+func New(product, tariff, dir string, loc *time.Location, opts ...Option) *Octopus {
+	o := &Octopus{
 		dir:     dir,
 		product: product,
 		tariff:  tariff,
 		loc:     loc,
+		client:  &http.Client{Timeout: 30 * time.Second},
 	}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o
 }
 
-func (o *Octopus) GenerateOctopusTariff(steps int) error {
-	client := http.Client{Timeout: 180 * time.Second}
+func (o *Octopus) Fetch(ctx context.Context) ([]Result, error) {
 	url := fmt.Sprintf("https://api.octopus.energy/v1/products/%s/electricity-tariffs/%s/standard-unit-rates/?page_size=100", o.product, o.tariff)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	res, err := client.Do(req)
+	res, err := o.client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	defer res.Body.Close()
 	out, err := io.ReadAll(res.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var r Results
 	err = json.Unmarshal(out, &r)
 	if err != nil {
+		return nil, err
+	}
+	return r.Results, nil
+}
+
+func (o *Octopus) GenerateOctopusTariff(ctx context.Context, steps int) error {
+	now := time.Now()
+
+	resolution := (time.Hour * 24) / time.Duration(steps)
+	results, err := o.Fetch(ctx)
+	if err != nil {
 		return err
 	}
-	slices.SortFunc(r.Results, func(a, b Result) int {
-		return cmp.Compare(a.ValidFrom.Unix(), b.ValidFrom.Unix())
-	})
+	contents := o.generateTariffContents(results, nextTariffBoundary(now, resolution), time.Hour*24, resolution)
+	body := bytes.Join(contents, nil)
 	fo, err := os.Create(filepath.Join(o.dir, provider.CSVFileName))
 	if err != nil {
 		return err
 	}
-	// close fo on exit and check for its returned error
 	defer func() {
 		if err = fo.Close(); err != nil {
 			panic(err)
 		}
 	}()
-	now := time.Now()
-	start := now.Truncate(time.Hour).Add(time.Hour)
-
-	t := start
-	var contents [][]byte
-	for i := 0; i < steps; i++ {
-		for _, row := range r.Results {
-			if (row.ValidFrom.Before(t) || row.ValidFrom.Equal(t)) && row.ValidTo.After(t) {
-				// Print CSV line
-				line := fmt.Sprintf("%s,%.4f\n", t.In(o.loc).Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
-				contents = append(contents, []byte(line))
-			}
-		}
-		step := float64(24*60) / float64(steps*60)
-		d := time.Duration(step * 60)
-		t = t.Add(d * time.Minute)
-	}
-	if len(contents) != steps {
-		// todo fix later, but useful for debug now
-		switch {
-		case o.product == "COSY-FIX-12M-25-09-24" && o.tariff == "E-1R-COSY-FIX-12M-25-09-24-N":
-			return ProduceOctopusCosyTariff(o.dir)
-		case strings.HasPrefix(o.product, "AGILE"):
-			t = time.Now()
-			for _, row := range r.Results {
-				if row.ValidFrom.Before(t) && row.ValidFrom.After(t.AddDate(0, 0, -1)) {
-					// Print CSV line
-					line := fmt.Sprintf("%s,%.4f\n", t.In(o.loc).Format("2006-01-02 15:04:05-07:00"), row.ValueIncVat/100)
-					contents = append(contents, []byte(line))
-				}
-			}
-		default:
-			return provider.TariffNotAvailable
-		}
-		return provider.TariffNotAvailable
-	}
-	body := bytes.Join(contents, nil)
 	if _, err = fo.Write(body); err != nil {
 		return err
 	}
@@ -189,4 +174,74 @@ func ProduceOctopusCosyTariff(dir string) error {
 		t = t.Add(time.Hour)
 	}
 	return nil
+}
+
+func (o *Octopus) generateTariffContents(
+	results []Result,
+	start time.Time,
+	duration time.Duration,
+	interval time.Duration,
+) [][]byte {
+	if duration <= 0 {
+		return nil
+	}
+
+	if interval <= 0 {
+		return nil
+	}
+
+	steps := int(duration / interval)
+	if steps <= 0 {
+		return nil
+	}
+
+	// Ensure results are ordered. This isn't strictly required for correctness,
+	// but makes lookup deterministic and allows the lookup to be optimised.
+	slices.SortFunc(results, func(a, b Result) int {
+		return a.ValidFrom.Compare(b.ValidFrom)
+	})
+
+	contents := make([][]byte, 0, steps)
+
+	for i := 0; i < steps; i++ {
+		t := start.Add(time.Duration(i) * interval)
+
+		row, ok := findTariff(results, t)
+		if !ok {
+			continue
+		}
+
+		line := fmt.Sprintf(
+			"%s,%.4f\n",
+			t.In(o.loc).Format("2006-01-02 15:04:05-07:00"),
+			row.ValueIncVat/100,
+		)
+
+		contents = append(contents, []byte(line))
+	}
+
+	return contents
+}
+
+func findTariff(results []Result, t time.Time) (Result, bool) {
+	for _, row := range results {
+		if !row.ValidFrom.After(t) && row.ValidTo.After(t) {
+			return row, true
+		}
+	}
+
+	return Result{}, false
+}
+
+func nextTariffBoundary(now time.Time, resolution time.Duration) time.Time {
+	if resolution <= 0 {
+		return now
+	}
+
+	truncated := now.Truncate(resolution)
+	if !truncated.After(now) {
+		truncated = truncated.Add(resolution)
+	}
+
+	return truncated
 }

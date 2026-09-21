@@ -268,8 +268,11 @@ func TestIntervertCurrentSOCHigherThanTargetSOC(t *testing.T) {
 			// set some realtime change
 			//s.SetCurrentDeviceMode(tt.currentWorkModePriority)
 			//s.SetCurrentBatteryFirstGridCharge(tt.currentBatteryFirstGridCharge)
-			s.SetCurrentSOC(tt.currentBattery)
-
+			err = s.SetCurrentSOC(tt.currentBattery)
+			if err != nil {
+				t.Fatal(err)
+				return
+			}
 			// review targets being handled
 			//targetSoC, err := s.GetTargetSOC()
 			//if err != nil {
@@ -312,6 +315,7 @@ func TestIntervertCurrentSOCHigherThanTargetSOC(t *testing.T) {
 			}
 			if batteryFirstGridCharge != tt.expectedBatteryFirstGridCharge {
 				t.Fail()
+				return
 			}
 		})
 	}

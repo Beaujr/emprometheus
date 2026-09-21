@@ -4,14 +4,15 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
-	"github.com/beaujr/emprometheus/internal/emhass"
-	"github.com/beaujr/emprometheus/internal/store"
 	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/emhass"
+	"github.com/beaujr/emprometheus/internal/store"
 
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
@@ -27,11 +28,11 @@ type Server struct {
 	scheduler scheduler.Scheduler
 	em        *emhass.Emhass
 	spp       scheduler.SimplePowerPlant
-	schedules store.Select
+	store     store.MinimalStore
 	password  string
 }
 
-func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, password string, schedules store.Select, scheduler scheduler.Scheduler, loc *time.Location, em *emhass.Emhass, plant scheduler.SimplePowerPlant) *http.Server {
+func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, password string, store store.MinimalStore, scheduler scheduler.Scheduler, loc *time.Location, em *emhass.Emhass, plant scheduler.SimplePowerPlant) *http.Server {
 	s := &Server{
 		logger:    logger,
 		ha:        ha,
@@ -39,7 +40,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, password
 		em:        em,
 		spp:       plant,
 		password:  password,
-		schedules: schedules,
+		store:     store,
 	}
 
 	mux := http.NewServeMux()
@@ -76,7 +77,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, password
 			w.Write([]byte(err.Error()))
 			return
 		}
-		err = s.em.Forecast(fm, string(body))
+		err = s.em.Forecast(r.Context(), fm, string(body))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
@@ -155,7 +156,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, password
 			0, 0, 0, 0,
 			time.Now().Location(),
 		)
-		rows, err := s.schedules(startOfToday)
+		rows, err := s.store.Select(startOfToday)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}

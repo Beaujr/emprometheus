@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/emhass"
 	"log"
 	"log/slog"
 	"net/http"
@@ -13,6 +12,8 @@ import (
 	"syscall"
 	"time"
 	_ "time/tzdata"
+
+	"github.com/beaujr/emprometheus/internal/emhass"
 
 	p "github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
@@ -69,7 +70,7 @@ func main() {
 	sigkillCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
 	defer stop()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	var rateFetcher = func(steps int) error {
+	var rateFetcher = func(ctx context.Context, steps int) error {
 		logger.Warn(fmt.Sprintf("rate fetcher is disabled, relying on %s already existing", provider.CSVFileName))
 		// dont modify any files and rely on external file creating data_load_cost_forecast.csv
 		return nil
@@ -83,7 +84,7 @@ func main() {
 		if *octopusProduct != "" {
 			rateFetcher = octopus.New(*octopusProduct, *octopusTariff, *dir, loc).GenerateOctopusTariff
 		}
-		if err = rateFetcher(*steps); err != nil {
+		if err = rateFetcher(sigkillCtx, *steps); err != nil {
 			logger.Warn("failed to fetch rates on start up", slog.String("error", err.Error()))
 		}
 	}
@@ -160,7 +161,7 @@ func main() {
 		}
 		ha := hass.New(logger, rateFetcher, querier, *steps)
 
-		srv := s.NewServer(sigkillCtx, logger, ha, *password, db.Select, sch, loc, em, sa)
+		srv := s.NewServer(sigkillCtx, logger, ha, *password, db, sch, loc, em, sa)
 		errGrp, ctx := errgroup.WithContext(sigkillCtx)
 		errGrp.Go(func() error {
 			if err = sch.Start(ctx); err != nil {

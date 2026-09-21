@@ -5,14 +5,14 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/types"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/types"
 )
 
 type (
-	Find   = func(time.Time) (Row, error)
 	Select = func(start time.Time) ([]Row, error)
 )
 
@@ -82,7 +82,7 @@ func (r Row) String() string {
 }
 
 func (r Row) StringWithTimezone(loc *time.Location) string {
-	return fmt.Sprintf("%s,%s,%s,%s,%.2f,%.2f", r.Optimization, r.Time.In(loc).Format(time.RFC3339), r.WorkMode, r.GridCharge, r.StopDischargeSOC, r.TargetSOC)
+	return fmt.Sprintf("%s,%s,%s,%s,%.2f,%.2f", r.Optimization, r.Time.In(loc).Format(time.RFC3339), r.WorkMode, r.GridCharge, r.StopDischargeSOC, r.TargetSOC*100)
 }
 
 func RowFromString(line string) (Row, error) {

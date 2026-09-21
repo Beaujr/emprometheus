@@ -21,6 +21,7 @@ releaser:
 	mv dist/$(APP_NAME)_linux_arm64_v8.0 dist/$(APP_NAME)_linux_arm64
 
 integration-test:
+	docker compose -f docker-compose.yaml build promhass --no-cache
 	@set -e; \
 	trap 'docker compose -f docker-compose.yaml down' EXIT; \
 	docker compose -f docker-compose.yaml up -d emhass --wait; \
