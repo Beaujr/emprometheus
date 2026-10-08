@@ -22,10 +22,10 @@ type Emhass struct {
 	baseUrl *url.URL
 	logger  *slog.Logger
 	dir     string
-	db      store.Store
+	db      store.OptimizationStore
 }
 
-func New(logger *slog.Logger, db store.Store, baseURL, dir string) (*Emhass, error) {
+func New(logger *slog.Logger, db store.OptimizationStore, baseURL, dir string) (*Emhass, error) {
 	e, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func (e *Emhass) Forecast(ctx context.Context, forecastMethod, body string) erro
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		return err
+		return fmt.Errorf("forecast request returned HTTP status %d", resp.StatusCode)
 	}
 	logger := e.logger.With(slog.String("file", filepath.Join(e.dir, provider.CSVForecastName)))
 	if err = e.copyFile(logger, e.dir, provider.CSVForecastName, forecastMethod); err != nil {
