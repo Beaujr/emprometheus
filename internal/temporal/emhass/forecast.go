@@ -40,7 +40,7 @@ func New(tariff provider.RateFetcher, getSoc GetSoc, run Run, em *emhass.Emhass,
 
 func (f *Forecaster) ForecastWorkflow(ctx workflow.Context) (string, error) {
 	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 30 * time.Second,
+		StartToCloseTimeout: time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: time.Minute,
 			MaximumAttempts: 2,

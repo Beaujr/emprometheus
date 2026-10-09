@@ -438,8 +438,7 @@ func (fs *Temporal) output(ctx context.Context, method string) error {
 		fs.logger.Info("No rows parsed.")
 		return nil
 	}
-	var schedules []Schedule
-	schedules = GetCommands(rows)
+	schedules := GetCommands(rows)
 	var lastScheduledTime time.Time
 	for _, schedule := range schedules {
 		fs.logger.Info(schedule.time.Format(time.RFC3339), slog.String("work mode", schedule.workmode), slog.String("battery first gridcharge", schedule.chargeBatteryFromGrid))
