@@ -15,7 +15,6 @@ import (
 	_ "time/tzdata"
 
 	"github.com/beaujr/emprometheus/internal/emhass"
-	"github.com/beaujr/emprometheus/internal/prometheus/solarapi"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 
@@ -119,7 +118,7 @@ func main() {
 			}
 			querier = p.New(v1.NewAPI(pclient))
 		case "solarassistant":
-			querier = solarapi.New("http://192.168.1.11", client)
+			querier = solarassistant.NewReporter(*historyHost, client)
 		default:
 			panic(errors.New("no history source provider configured"))
 		}

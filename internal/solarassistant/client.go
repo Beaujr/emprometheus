@@ -1,4 +1,4 @@
-package solarapi
+package solarassistant
 
 import (
 	"context"
@@ -17,7 +17,7 @@ type Reporter struct {
 	client  *http.Client
 }
 
-func New(baseURL string, c *http.Client) *Reporter {
+func NewReporter(baseURL string, c *http.Client) *Reporter {
 	return &Reporter{
 		baseURL: baseURL,
 		client:  c,
