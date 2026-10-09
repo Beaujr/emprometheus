@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -14,6 +15,9 @@ import (
 	_ "time/tzdata"
 
 	"github.com/beaujr/emprometheus/internal/emhass"
+	"github.com/beaujr/emprometheus/internal/prometheus/solarapi"
+	"github.com/prometheus/client_golang/api"
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 
 	p "github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
@@ -25,8 +29,6 @@ import (
 	"github.com/beaujr/emprometheus/internal/store"
 	"github.com/beaujr/emprometheus/internal/store/postgres"
 	"github.com/beaujr/emprometheus/internal/temporal"
-	"github.com/prometheus/client_golang/api"
-	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	temporalsdk "go.temporal.io/sdk/client"
 	"golang.org/x/sync/errgroup"
 )
@@ -36,11 +38,12 @@ var (
 	tariff                 = flag.Bool("tariff", false, "generate tariff files")
 	process                = flag.Bool("process", false, "process emhasses")
 	server                 = flag.Bool("server", false, "run data server")
-	promApi                = flag.String("prometheus", "http://192.168.1.112:9090", "http://promapi:port")
-	promUser               = flag.String("prometheus.user", "", "http://promapi:port")
-	promPass               = flag.String("prometheus.pass", "", "http://promapi:port")
-	octopusProduct         = flag.String("octopus.product", "COSY-FIX-12M-25-09-24", "Octopus Product")
-	octopusTariff          = flag.String("octopus.tariff", "E-1R-COSY-FIX-12M-25-09-24-N", "Octopus Tariff")
+	history                = flag.String("source", "prometheus", "History Provider for usage. eg: prometheus, solarassistant")
+	historyHost            = flag.String("source.host", "http://192.168.1.216:9090", "http://promapi:port")
+	historyUser            = flag.String("source.user", "", "basicAuth user")
+	historyPass            = flag.String("source.pass", "", "basicAuth password")
+	octopusProduct         = flag.String("octopus.product", "COSY-22-12-08", "Octopus Product")
+	octopusTariff          = flag.String("octopus.tariff", "E-1R-COSY-22-12-08-N", "Octopus Tariff")
 	useTemporal            = flag.Bool("temporal.enable", false, "use temporal")
 	temporalNamespace      = flag.String("temporal.namespace", "beau", "temporal namespace")
 	temporalAddress        = flag.String("temporal.address", "temporal-frontend-headless.temporal.svc.cluster.local:7233", "temporal address")
@@ -96,21 +99,30 @@ func main() {
 		client := &http.Client{
 			Timeout: 180 * time.Second,
 		}
-		if len(*promPass) > 0 {
+		if len(*historyUser) > 0 {
 			client.Transport = &basicAuthTransport{
 				Transport: http.DefaultTransport, // Use the default transport
-				Username:  *promUser,
-				Password:  *promPass,
+				Username:  *historyUser,
+				Password:  *historyPass,
 			}
 		}
-		pclient, err := api.NewClient(api.Config{
-			Address:      *promApi,
-			RoundTripper: client.Transport,
-		})
-		if err != nil {
-			panic(err.Error())
+
+		var querier p.Reporter
+		switch *history {
+		case "prometheus":
+			pclient, err := api.NewClient(api.Config{
+				Address:      *historyHost,
+				RoundTripper: client.Transport,
+			})
+			if err != nil {
+				panic(err.Error())
+			}
+			querier = p.New(v1.NewAPI(pclient))
+		case "solarassistant":
+			querier = solarapi.New("http://192.168.1.11", client)
+		default:
+			panic(errors.New("no history source provider configured"))
 		}
-		querier := p.New(v1.NewAPI(pclient))
 
 		// use filestore by default
 		storeOpts := []store.Option{store.WithFilestore(*dir, provider.CSVScheduleName)}

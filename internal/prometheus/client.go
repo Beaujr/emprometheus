@@ -25,7 +25,8 @@ type reporter struct {
 }
 
 func (r *reporter) GetRange(ctx context.Context, query string, start, end time.Time, step time.Duration) (model.Matrix, error) {
-	grid, warning, err := r.api.QueryRange(ctx, query, v1.Range{
+	q := fmt.Sprintf("avg(%s unless changes(%s[2m]) == 0 or vector(0)) * 2", query, query)
+	grid, warning, err := r.api.QueryRange(ctx, q, v1.Range{
 		Start: start,
 		End:   end,
 		Step:  step,

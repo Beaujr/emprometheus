@@ -3,7 +3,6 @@ package hass
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -56,8 +55,7 @@ func (h *Hass) getData(w http.ResponseWriter, r *http.Request) {
 		step = 300
 	}
 	// TODO: write a better query
-	query := fmt.Sprintf("avg(%s unless changes(%s[2m]) == 0 or vector(0)) * 2", pieces[1], pieces[1])
-	values, err := prometheus.GetRange(r.Context(), h.p, query, start, time.Now(), step)
+	values, err := prometheus.GetRange(r.Context(), h.p, pieces[1], start, time.Now(), step)
 	if err != nil {
 		if !errors.Is(err, prometheus.ErrNoRows) {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -77,7 +75,7 @@ func (h *Hass) getData(w http.ResponseWriter, r *http.Request) {
 					StateClass:        "measurement",
 					UnitOfMeasurement: "W",
 					DeviceClass:       "power",
-					FriendlyName:      query,
+					FriendlyName:      pieces[1],
 				},
 				LastChanged: times.Format("2006-01-02T15:04:05+00:00"),
 				LastUpdated: times.Format("2006-01-02T15:04:05+00:00"),
