@@ -14,24 +14,34 @@ make compose
 ```
 
 ## flags
-```go
-var (
-    dir               = flag.String("dir", "./emhass_config/data", "the directory to serve files from")
-    tariff            = flag.Bool("tariff", false, "generate tariff files")
-    process           = flag.Bool("process", false, "process emhasses")
-    server            = flag.Bool("server", false, "run data server")
-    promApi           = flag.String("prometheus", "http://192.168.1.112:9090", "http://promapi:port")
-    promUser          = flag.String("prometheus.user", "", "http://promapi:port")
-    promPass          = flag.String("prometheus.pass", "", "http://promapi:port")
-    octopusProduct    = flag.String("octopus.product", "COSY-FIX-12M-25-09-24", "Octopus Product")
-    octopusTariff     = flag.String("octopus.tariff", "E-1R-COSY-FIX-12M-25-09-24-N", "Octopus Tariff")
-    useTemporal       = flag.Bool("temporal.enable", false, "use temporal")
-    temporalNamespace = flag.String("temporal.namespace", "beau", "temporal namespace")
-    temporalAddress   = flag.String("temporal.address", "temporal-frontend-headless.temporal.svc.cluster.local:7233", "temporal address")
-    temporalSchedule  = flag.String("temporal.schedule", "2 11,23 * * *", "temporal schedule")
-    soc = flag.String("soc", "battery_soc", "the prometheus battery SOC metric")
-)
-```
+
+EmPrometheus is configured using command-line flags. Flags use Go's standard `flag` package and can be passed to the application at startup.
+
+| Flag                  | Type   | Default                                                      | Description                                                                                                |
+| --------------------- | ------ | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `-dir`                | string | `./emhass_config/data`                                       | Directory to serve files from and store application data.                                                  |
+| `-tariff`             | bool   | `false`                                                      | Generate electricity tariff files.                                                                         |
+| `-process`            | bool   | `false`                                                      | Process EMHASS data, then exit.                                                                            |
+| `-server`             | bool   | `false`                                                      | Run the data server.                                                                                       |
+| `-source`             | string | `prometheus`                                                 | History provider for energy usage. Supported values: `prometheus`, `solarassistant`.                       |
+| `-source.host`        | string | `http://192.168.1.216:9090`                                  | History provider URL, such as the Prometheus API endpoint or Solar Assistant endpoint.                     |
+| `-source.user`        | string | Empty                                                        | Basic authentication username for the history provider.                                                    |
+| `-source.pass`        | string | Empty                                                        | Basic authentication password for the history provider.                                                    |
+| `-octopus.product`    | string | `COSY-22-12-08`                                              | Octopus Energy product identifier.                                                                         |
+| `-octopus.tariff`     | string | `E-1R-COSY-22-12-08-N`                                       | Octopus Energy tariff identifier.                                                                          |
+| `-temporal.enable`    | bool   | `false`                                                      | Enable Temporal integration.                                                                               |
+| `-temporal.namespace` | string | `beau`                                                       | Temporal namespace.                                                                                        |
+| `-temporal.address`   | string | `temporal-frontend-headless.temporal.svc.cluster.local:7233` | Temporal frontend address.                                                                                 |
+| `-temporal.schedule`  | string | `2 11,23 * * *`                                              | Schedule expression used by Temporal.                                                                      |
+| `-temporal.tls`       | bool   | `false`                                                      | Enable TLS for the Temporal client connection.                                                             |
+| `-emhass.url`         | string | `http://localhost:5000/action`                               | EMHASS action endpoint.                                                                                    |
+| `-mpc`                | bool   | `false`                                                      | Enable model predictive control (MPC) instead of relying only on forecasts.                                |
+| `-init`               | bool   | `true`                                                       | Create Temporal schedules when the application starts.                                                     |
+| `-dsn`                | string | Empty                                                        | PostgreSQL connection DSN. When provided, PostgreSQL is used to store schedules instead of the file store. |
+| `-password`           | string | Empty                                                        | Password for the administrative endpoint.                                                                  |
+| `-timezone`           | string | `Europe/London`                                              | Time zone used for scheduling and time calculations.                                                       |
+| `-steps`              | int    | `24`                                                         | Number of steps to generate.                                                                               |
+
 
 ## Trigger a forecast
 This will fascade a call to emhass and save the output
