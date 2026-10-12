@@ -91,13 +91,21 @@ func (h *stateHandler) Load() error {
 		return err
 	}
 	soc, err := h.parent.GetSOC()
+	if err != nil {
+		return err
+	}
 	err = h.state.SetSoc(soc)
-
+	if err != nil {
+		return err
+	}
 	deviceMode, err := h.parent.GetDeviceMode()
 	if err != nil {
 		return err
 	}
 	err = h.state.SetDeviceMode(deviceMode)
+	if err != nil {
+		return err
+	}
 	deviceModeTarget, err := h.parent.GetDeviceModeTarget()
 	if err != nil {
 		return err

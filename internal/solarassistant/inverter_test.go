@@ -11,37 +11,6 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-type fakemsg struct {
-	topic, payload string
-}
-
-func (fk fakemsg) Duplicate() bool {
-	return true
-}
-
-func (fk fakemsg) Qos() byte {
-	return 0
-}
-
-func (fk fakemsg) Retained() bool {
-	return false
-}
-
-func (fk fakemsg) Topic() string {
-	return fk.topic
-}
-
-func (fk fakemsg) MessageID() uint16 {
-	return 0
-}
-
-func (fk fakemsg) Payload() []byte {
-	return []byte(fk.payload)
-}
-
-func (fk fakemsg) Ack() {
-}
-
 type fakeclient struct {
 	plant scheduler.ControllablePowerPlant
 }
@@ -59,7 +28,6 @@ func (f fakeclient) Connect() mqtt.Token {
 }
 
 func (f fakeclient) Disconnect(quiesce uint) {
-	return
 }
 
 func (f fakeclient) Publish(topic string, qos byte, retained bool, msg interface{}) mqtt.Token {
@@ -69,11 +37,20 @@ func (f fakeclient) Publish(topic string, qos byte, retained bool, msg interface
 		if err != nil {
 			return fakeToken{}
 		}
-		f.plant.SetCurrentSOC(int64(batterySOC))
+		err = f.plant.SetCurrentSOC(int64(batterySOC))
+		if err != nil {
+			return nil
+		}
 	case solarassistant.TopicWorkModePriority:
-		f.plant.SetCurrentDeviceMode(msg.(string))
+		err := f.plant.SetCurrentDeviceMode(msg.(string))
+		if err != nil {
+			return nil
+		}
 	case solarassistant.TopicBatteryFirstGridCharge:
-		f.plant.SetCurrentBatteryFirstGridCharge(msg.(string))
+		err := f.plant.SetCurrentBatteryFirstGridCharge(msg.(string))
+		if err != nil {
+			return nil
+		}
 	case solarassistant.TopicLoadFirstStopDischarge:
 		loadFirstStopDischarge, err := strconv.ParseFloat(msg.(string), 32)
 		if err != nil {
@@ -99,7 +76,6 @@ func (f fakeclient) Unsubscribe(topics ...string) mqtt.Token {
 }
 
 func (f fakeclient) AddRoute(topic string, callback mqtt.MessageHandler) {
-	return
 }
 
 func (f fakeclient) OptionsReader() mqtt.ClientOptionsReader {
@@ -256,8 +232,14 @@ func TestIntervertCurrentSOCHigherThanTargetSOC(t *testing.T) {
 				t.Fatal(err)
 				return
 			}
-			s.SetCurrentDeviceMode(tt.initialWorkModePriority)
-			s.SetCurrentBatteryFirstGridCharge(tt.initialBatteryFirstGridCharge)
+			if err = s.SetCurrentDeviceMode(tt.initialWorkModePriority); err != nil {
+				t.Fatal(err)
+				return
+			}
+			if err = s.SetCurrentBatteryFirstGridCharge(tt.initialBatteryFirstGridCharge); err != nil {
+				t.Fatal(err)
+				return
+			}
 
 			// set inverter state
 			if err = s.Process(t.Context(), tt.targetBatteryFirstGridCharge, tt.targetWorkModePriority, tt.targetBattery); err != nil {

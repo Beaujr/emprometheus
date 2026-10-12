@@ -144,10 +144,7 @@ func (fs *Temporal) InitForecastSchedule(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		for {
-			if !existing.HasNext() {
-				break
-			}
+		for !existing.HasNext() {
 			next, err := existing.Next()
 			if err != nil {
 				fs.logger.Warn(err.Error())
@@ -322,13 +319,13 @@ func (fs *Temporal) scheduleForecastWorkflow(ctx context.Context, t time.Time) e
 		},
 		Action: action,
 	}
-	sch, err := fs.s.Create(ctx, opts)
+	_, err := fs.s.Create(ctx, opts)
 	if err != nil {
 		if !errors.Is(err, temporal2.ErrScheduleAlreadyRunning) {
 			return err
 		}
 		fs.logger.Warn("updating workflow schedule", slog.String("scheduleID", action.ID))
-		sch = fs.s.GetHandle(ctx, action.ID)
+		sch := fs.s.GetHandle(ctx, action.ID)
 		err = sch.Update(ctx, client.ScheduleUpdateOptions{DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 			input.Description.Schedule.Spec = &opts.Spec
 			input.Description.Schedule.Action = opts.Action

@@ -4,13 +4,15 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/types"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/types"
 )
 
 // fileState is the JSON-serialised inverter settings persisted by FileStore.
@@ -45,16 +47,18 @@ type FileStore struct {
 	statepath string // inverter state JSON
 	optimpath string // optimization results CSV
 	mu        sync.RWMutex
+	logger    *slog.Logger
 }
 
 // newFileStore creates a FileStore rooted at dir/name. The state and
 // optimisation files are derived from name automatically.
-func newFileStore(dir string, name string) (*FileStore, error) {
+func newFileStore(logger *slog.Logger, dir string, name string) (*FileStore, error) {
 	base := strings.TrimSuffix(name, filepath.Ext(name))
 	fs := &FileStore{
 		filepath:  filepath.Join(dir, name),
 		statepath: filepath.Join(dir, base+"_state.json"),
 		optimpath: filepath.Join(dir, base+"_optimization.csv"),
+		logger:    logger,
 	}
 	file, err := os.OpenFile(fs.filepath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
@@ -114,7 +118,11 @@ func (f *FileStore) writeLines(path string, lines []string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err = file.Close(); err != nil {
+			f.logger.Error(err.Error())
+		}
+	}()
 	for _, line := range lines {
 		if _, err = file.WriteString(line + "\n"); err != nil {
 			return err

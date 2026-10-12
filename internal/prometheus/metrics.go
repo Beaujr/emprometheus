@@ -1,13 +1,14 @@
 package prometheus
 
 import (
+	"log"
+	"log/slog"
+	"net/http"
+
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	p "go.opentelemetry.io/otel/exporters/prometheus"
 	api "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/sdk/metric"
-	"log"
-	"log/slog"
-	"net/http"
 )
 
 var (
@@ -29,7 +30,6 @@ func Serve(logger *slog.Logger) error {
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/health", func(writer http.ResponseWriter, request *http.Request) {
 		writer.WriteHeader(http.StatusOK)
-		return
 	})
 	err := http.ListenAndServe(":2223", nil)
 	if err != nil {

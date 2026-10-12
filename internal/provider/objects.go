@@ -13,6 +13,6 @@ const (
 	ActionMPC       = "naive-mpc-optim"
 )
 
-var TariffNotAvailable = errors.New("future tariff not available")
+var ErrTariffNotAvailable = errors.New("future tariff not available")
 
 type RateFetcher = func(ctx context.Context, steps int) error

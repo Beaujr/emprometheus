@@ -31,11 +31,15 @@ func main() {
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	db, err := store.New(store.WithFilestore(*dir, provider.CSVScheduleName))
+	db, err := store.New(logger, store.WithFilestore(*dir, provider.CSVScheduleName))
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
+	defer func() {
+		if err = db.Close(); err != nil {
+			logger.Error(err.Error())
+		}
+	}()
 
 	var fetcher = func(_ context.Context, _ int) error {
 		return octopus.ProduceOctopusCosyTariff(*dir)

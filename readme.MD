@@ -17,18 +17,21 @@ make compose
 
 EmPrometheus is configured using command-line flags. Flags use Go's standard `flag` package and can be passed to the application at startup.
 
-| Flag                  | Type   | Default                                                      | Description                                                                                                |
-| --------------------- | ------ | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `-dir`                | string | `./emhass_config/data`                                       | Directory to serve files from and store application data.                                                  |
-| `-tariff`             | bool   | `false`                                                      | Generate electricity tariff files.                                                                         |
-| `-process`            | bool   | `false`                                                      | Process EMHASS data, then exit.                                                                            |
-| `-server`             | bool   | `false`                                                      | Run the data server.                                                                                       |
-| `-source`             | string | `prometheus`                                                 | History provider for energy usage. Supported values: `prometheus`, `solarassistant`.                       |
-| `-source.host`        | string | `http://192.168.1.216:9090`                                  | History provider URL, such as the Prometheus API endpoint or Solar Assistant endpoint.                     |
-| `-source.user`        | string | Empty                                                        | Basic authentication username for the history provider.                                                    |
-| `-source.pass`        | string | Empty                                                        | Basic authentication password for the history provider.                                                    |
-| `-octopus.product`    | string | `COSY-22-12-08`                                              | Octopus Energy product identifier.                                                                         |
-| `-octopus.tariff`     | string | `E-1R-COSY-22-12-08-N`                                       | Octopus Energy tariff identifier.                                                                          |
+| Flag                  | Type   | Default                                                      | Description                                                                           |
+| --------------------- | ------ |--------------------------------------------------------------|---------------------------------------------------------------------------------------|
+| `-dir`                | string | `./emhass_config/data`                                       | Directory to serve files from and store application data.                             |
+| `-tariff`             | bool   | `false`                                                      | Generate electricity tariff files.                                                    |
+| `-process`            | bool   | `false`                                                      | Process EMHASS data, then exit.                                                       |
+| `-server`             | bool   | `false`                                                      | Run the data server.                                                                  |
+| `-source`             | string | `prometheus`                                                 | History provider for energy usage. Supported values: `prometheus`, `solarassistant`.  |
+| `-source.host`        | string | `http://192.168.1.216:9090`                                  | History provider URL, such as the Prometheus API endpoint or Solar Assistant endpoint. |
+| `-source.user`        | string | Empty                                                        | Basic authentication username for the history provider.                               |
+| `-source.pass`        | string | Empty                                                        | Basic authentication password for the history provider.                               |
+| `-octopus.product`    | string | `COSY-22-12-08`                                              | Octopus Energy product identifier.                                                    |
+| `-octopus.tariff`     | string | `E-1R-COSY-22-12-08-N`                                       | Octopus Energy tariff identifier.                                                     |
+| `-octopus.tariff`     | string | `E-1R-COSY-22-12-08-N`                                       | Octopus Energy tariff identifier.                                                     |
+| `-octopus.apikey`     | string | `sk_somethingsomething`                                      | Octopus Energy API Key. (Optional)                                                    |
+| `-octopus.accountNumber`     | string | `A-something`                                                | Octopus Energy Account Number. (Optional)                                          |
 | `-temporal.enable`    | bool   | `false`                                                      | Enable Temporal integration.                                                                               |
 | `-temporal.namespace` | string | `beau`                                                       | Temporal namespace.                                                                                        |
 | `-temporal.address`   | string | `temporal-frontend-headless.temporal.svc.cluster.local:7233` | Temporal frontend address.                                                                                 |
