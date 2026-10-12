@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -118,22 +119,23 @@ func RowFromString(line string) (Row, error) {
 }
 
 type storeConfig struct {
-	p *PostgresStore
-	f *FileStore
+	p      *PostgresStore
+	f      *FileStore
+	logger *slog.Logger
 }
 
 type Option = func(s *storeConfig) error
 
 func WithDB(db *sql.DB) Option {
 	return func(s *storeConfig) error {
-		s.p = &PostgresStore{db: db}
+		s.p = &PostgresStore{logger: s.logger, db: db}
 		return s.p.migrations()
 	}
 }
 
 func WithFilestore(dir, name string) Option {
 	return func(s *storeConfig) error {
-		f, err := newFileStore(dir, name)
+		f, err := newFileStore(s.logger, dir, name)
 		if err != nil {
 			return err
 		}
@@ -142,8 +144,8 @@ func WithFilestore(dir, name string) Option {
 	}
 }
 
-func New(opts ...Option) (Store, error) {
-	s := &storeConfig{}
+func New(logger *slog.Logger, opts ...Option) (Store, error) {
+	s := &storeConfig{logger: logger}
 	for _, opt := range opts {
 		if err := opt(s); err != nil {
 			return nil, err

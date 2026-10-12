@@ -52,7 +52,7 @@ func (f *Forecaster) ForecastWorkflow(ctx workflow.Context) (string, error) {
 
 	err := workflow.ExecuteActivity(ctx, f.ForecastActivity).Get(ctx, nil)
 	if err != nil {
-		if errors.Is(err, provider.TariffNotAvailable) {
+		if errors.Is(err, provider.ErrTariffNotAvailable) {
 			return "Not Ready", nil
 		}
 		logger.Error("Activity failed.", "Error", err)

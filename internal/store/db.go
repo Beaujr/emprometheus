@@ -3,8 +3,10 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"github.com/beaujr/emprometheus/internal/types"
+	"log/slog"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/types"
 
 	_ "github.com/lib/pq"
 )
@@ -15,7 +17,8 @@ const (
 )
 
 type PostgresStore struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
 func (p PostgresStore) Delete(row Row) error {
@@ -243,7 +246,11 @@ ORDER BY time ASC;
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err = rows.Close(); err != nil {
+			p.logger.Error(err.Error())
+		}
+	}()
 
 	var result []types.OptimizationResult
 
@@ -308,7 +315,11 @@ ORDER BY time ASC;
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err = rows.Close(); err != nil {
+			p.logger.Error(err.Error())
+		}
+	}()
 
 	var result []Row
 

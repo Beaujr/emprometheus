@@ -44,7 +44,12 @@ func (e *Emhass) Forecast(ctx context.Context, forecastMethod, body string) erro
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err = resp.Body.Close(); err != nil {
+			e.logger.Error(err.Error())
+		}
+	}()
+
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("forecast request returned HTTP status %d", resp.StatusCode)
 	}
@@ -63,7 +68,11 @@ func (e *Emhass) copyFile(logger *slog.Logger, dir, src, forecastMethod string) 
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer func() {
+		if err = sourceFile.Close(); err != nil {
+			e.logger.Error(err.Error())
+		}
+	}()
 	_, err = sourceFile.Seek(0, io.SeekStart)
 	if err != nil {
 		return err
@@ -94,7 +103,11 @@ func (e *Emhass) copyFile(logger *slog.Logger, dir, src, forecastMethod string) 
 
 func (e *Emhass) getLoadForecastHorizon() (time.Time, error) {
 	f, err := os.Open(filepath.Join(e.dir, provider.CSVFileName))
-	defer f.Close()
+	defer func() {
+		if err = f.Close(); err != nil {
+			e.logger.Error(err.Error())
+		}
+	}()
 	if err != nil {
 		return time.Time{}, err
 	}

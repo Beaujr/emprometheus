@@ -26,13 +26,19 @@ func New(logger *slog.Logger, fetcher provider.RateFetcher, p prometheus.Reporte
 
 func (h *Hass) config(w http.ResponseWriter, r *http.Request) {
 	if err := h.fetcher(r.Context(), h.steps); err != nil {
+		h.logger.Error(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+		_, err = w.Write([]byte(err.Error()))
+		if err != nil {
+			h.logger.Error(err.Error())
+			return
+		}
+	}
+	_, err := w.Write([]byte("{}"))
+	if err != nil {
 		h.logger.Error(err.Error())
 		return
 	}
-	resp := `{}`
-	w.Write([]byte(resp))
 }
 
 func (h *Hass) getData(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +53,11 @@ func (h *Hass) getData(w http.ResponseWriter, r *http.Request) {
 	start, err := time.Parse(time.DateTime, cleanStart[:19])
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(err.Error()))
+		_, err = w.Write([]byte(err.Error()))
+		if err != nil {
+			h.logger.Error(err.Error())
+			return
+		}
 		return
 	}
 	step := (time.Now().Unix() - start.Unix()) / 11000
@@ -59,7 +69,10 @@ func (h *Hass) getData(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if !errors.Is(err, prometheus.ErrNoRows) {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
+			_, err = w.Write([]byte(err.Error()))
+			if err != nil {
+				h.logger.Error(err.Error())
+			}
 			return
 		}
 
@@ -85,13 +98,18 @@ func (h *Hass) getData(w http.ResponseWriter, r *http.Request) {
 	out, err := json.Marshal(response)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(err.Error()))
+		_, err = w.Write([]byte(err.Error()))
+		if err != nil {
+			h.logger.Error(err.Error())
+		}
 		return
 	}
-	out = []byte("[" + string(out) + "]")
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(out)
-	return
+	_, err = w.Write([]byte("[" + string(out) + "]"))
+	if err != nil {
+		h.logger.Error(err.Error())
+		return
+	}
 }
 
 func (h *Hass) Register(mux *http.ServeMux) {

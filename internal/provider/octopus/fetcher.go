@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,6 +16,11 @@ import (
 	"github.com/beaujr/emprometheus/internal/provider"
 )
 
+var (
+	GraphQLEndpoint = "https://api.backend.octopus.energy/v1/graphql/"
+	TokenEndpoint   = "https://api.octopus.energy/v1/graphql/"
+)
+
 type Results struct {
 	Count    int         `json:"count"`
 	Next     string      `json:"next"`
@@ -22,17 +28,33 @@ type Results struct {
 	Results  []Result    `json:"results"`
 }
 type Result struct {
-	ValueExcVat   float64     `json:"value_exc_vat"`
-	ValueIncVat   float64     `json:"value_inc_vat"`
-	ValidFrom     time.Time   `json:"valid_from"`
-	ValidTo       time.Time   `json:"valid_to"`
-	PaymentMethod interface{} `json:"payment_method"`
+	ValueExcVat float64   `json:"value_exc_vat"`
+	ValueIncVat float64   `json:"value_inc_vat"`
+	ValidFrom   time.Time `json:"valid_from"`
+	ValidTo     time.Time `json:"valid_to"`
+}
+
+// GraphQLRequest models the standard payload structure
+type GraphQLRequest struct {
+	Query     string                 `json:"query"`
+	Variables map[string]interface{} `json:"variables,omitempty"`
+}
+
+// TokenResponse decodes the Kraken JWT token exchange
+type TokenResponse struct {
+	Data struct {
+		ObtainKrakenToken struct {
+			Token string `json:"token"`
+		} `json:"obtainKrakenToken"`
+	} `json:"data"`
+	Errors []interface{} `json:"errors"`
 }
 
 type Octopus struct {
-	dir, product, tariff string
-	loc                  *time.Location
-	client               *http.Client
+	logger                                  *slog.Logger
+	dir, product, tariff, apikey, accountNo string
+	loc                                     *time.Location
+	client                                  *http.Client
 }
 
 type Option func(*Octopus)
@@ -43,8 +65,16 @@ func WithClient(c *http.Client) Option {
 	}
 }
 
-func New(product, tariff, dir string, loc *time.Location, opts ...Option) *Octopus {
+func WithAPIKeyAndAccountNo(apikey, accountNo string) Option {
+	return func(o *Octopus) {
+		o.apikey = apikey
+		o.accountNo = accountNo
+	}
+}
+
+func New(logger *slog.Logger, product, tariff, dir string, loc *time.Location, opts ...Option) *Octopus {
 	o := &Octopus{
+		logger:  logger,
 		dir:     dir,
 		product: product,
 		tariff:  tariff,
@@ -67,7 +97,11 @@ func (o *Octopus) Fetch(ctx context.Context) ([]Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer func() {
+		if err = res.Body.Close(); err != nil {
+			o.logger.Error(err.Error())
+		}
+	}()
 	out, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
@@ -87,6 +121,21 @@ func (o *Octopus) GenerateOctopusTariff(ctx context.Context, steps int) error {
 	results, err := o.Fetch(ctx)
 	if err != nil {
 		return err
+	}
+
+	// if an apikey and account is set, check for happyhours
+	if o.apikey != "" && o.accountNo != "" {
+		happyHours, err := o.fetchSavingSessions(ctx)
+		if err != nil {
+			return err
+		}
+		happyHoursRemoved := slices.DeleteFunc(results, func(result Result) bool {
+			for _, h := range happyHours {
+				return result.ValidFrom.Equal(h.ValidFrom)
+			}
+			return false
+		})
+		results = append(happyHoursRemoved, happyHours...)
 	}
 	contents := o.generateTariffContents(results, nextTariffBoundary(now, resolution), time.Hour*24, resolution)
 	body := bytes.Join(contents, nil)
@@ -244,4 +293,56 @@ func nextTariffBoundary(now time.Time, resolution time.Duration) time.Time {
 	}
 
 	return truncated
+}
+
+func (o *Octopus) getKrakenClient(ctx context.Context) (*http.Client, error) {
+	mutation := `
+		mutation ObtainKrakenToken($apiKey: String!) {
+			obtainKrakenToken(input: {APIKey: $apiKey}) {
+				token
+			}
+		}
+	`
+	reqPayload := GraphQLRequest{
+		Query:     mutation,
+		Variables: map[string]interface{}{"apiKey": o.apikey},
+	}
+
+	jsonBytes, err := json.Marshal(reqPayload)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, TokenEndpoint, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err = resp.Body.Close(); err != nil {
+			o.logger.Error(err.Error())
+		}
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var tokenResp TokenResponse
+	if err = json.Unmarshal(body, &tokenResp); err != nil {
+		return nil, err
+	}
+
+	if len(tokenResp.Errors) > 0 {
+		return nil, fmt.Errorf("GraphQL Error generating token: %v", tokenResp.Errors)
+	}
+	c := &http.Client{Transport: &jwtAuthTransport{
+		Transport: o.client.Transport,
+		token:     tokenResp.Data.ObtainKrakenToken.Token,
+	}}
+	return c, nil
 }

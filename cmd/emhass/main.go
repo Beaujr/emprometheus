@@ -43,6 +43,8 @@ var (
 	historyPass            = flag.String("source.pass", "", "basicAuth password")
 	octopusProduct         = flag.String("octopus.product", "COSY-22-12-08", "Octopus Product")
 	octopusTariff          = flag.String("octopus.tariff", "E-1R-COSY-22-12-08-N", "Octopus Tariff")
+	octopusAPIKey          = flag.String("octopus.apikey", "", "Octopus API Key, optional")
+	octopusAccountNo       = flag.String("octopus.accountNumber", "", "Octopus Account Number, optional")
 	useTemporal            = flag.Bool("temporal.enable", false, "use temporal")
 	temporalNamespace      = flag.String("temporal.namespace", "beau", "temporal namespace")
 	temporalAddress        = flag.String("temporal.address", "temporal-frontend-headless.temporal.svc.cluster.local:7233", "temporal address")
@@ -84,7 +86,11 @@ func main() {
 	}
 	if *tariff {
 		if *octopusProduct != "" {
-			rateFetcher = octopus.New(*octopusProduct, *octopusTariff, *dir, loc).GenerateOctopusTariff
+			var opts []octopus.Option
+			if len(*octopusAPIKey) > 0 && len(*octopusAccountNo) > 0 {
+				opts = append(opts, octopus.WithAPIKeyAndAccountNo(*octopusAPIKey, *octopusAccountNo))
+			}
+			rateFetcher = octopus.New(logger, *octopusProduct, *octopusTariff, *dir, loc, opts...).GenerateOctopusTariff
 		}
 		if err = rateFetcher(sigkillCtx, *steps); err != nil {
 			logger.Warn("failed to fetch rates on start up", slog.String("error", err.Error()))
@@ -118,7 +124,7 @@ func main() {
 			}
 			querier = p.New(v1.NewAPI(pclient))
 		case "solarassistant":
-			querier = solarassistant.NewReporter(*historyHost, client)
+			querier = solarassistant.NewReporter(logger, *historyHost, client)
 		default:
 			panic(errors.New("no history source provider configured"))
 		}
@@ -132,11 +138,15 @@ func main() {
 			}
 			storeOpts = []store.Option{store.WithDB(psqldb)}
 		}
-		db, err := store.New(storeOpts...)
+		db, err := store.New(logger, storeOpts...)
 		if err != nil {
 			panic(err.Error())
 		}
-		defer db.Close()
+		defer func() {
+			if err = db.Close(); err != nil {
+				logger.Error(err.Error())
+			}
+		}()
 
 		var c temporalsdk.Client
 		var sch scheduler.Scheduler = &scheduler.DebugScheduler{}

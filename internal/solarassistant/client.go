@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -15,10 +16,12 @@ import (
 type Reporter struct {
 	baseURL string
 	client  *http.Client
+	logger  *slog.Logger
 }
 
-func NewReporter(baseURL string, c *http.Client) *Reporter {
+func NewReporter(logger *slog.Logger, baseURL string, c *http.Client) *Reporter {
 	return &Reporter{
+		logger:  logger,
 		baseURL: baseURL,
 		client:  c,
 	}
@@ -44,7 +47,11 @@ func (r *Reporter) history(ctx context.Context, query string, start, end time.Ti
 	if err != nil {
 		return nil, fmt.Errorf("request solar assistant history: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err = resp.Body.Close(); err != nil {
+			r.logger.Error(err.Error())
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("solar assistant history returned HTTP %d", resp.StatusCode)
