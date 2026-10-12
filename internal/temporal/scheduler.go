@@ -468,6 +468,10 @@ func GetCommands(rows []optim.OptimizationResult) []Schedule {
 		return nil
 	}
 	minGridRow := slices.MinFunc(rows, func(a, b optim.OptimizationResult) int {
+		// avoid setting rows with 0 cost as minGridRow
+		if a.UnitLoadCost() == 0 {
+			return 1
+		}
 		return cmp.Compare(a.UnitLoadCost(), b.UnitLoadCost())
 	})
 	minPrice := minGridRow.UnitLoadCost()
@@ -482,7 +486,7 @@ func GetCommands(rows []optim.OptimizationResult) []Schedule {
 	startIdx := 0
 
 	for i := range rows {
-		if rows[i].UnitLoadCost() == minPrice {
+		if rows[i].UnitLoadCost() == minPrice || rows[i].UnitLoadCost() == 0 {
 			if !inBlock {
 				inBlock = true
 				startIdx = i
@@ -522,7 +526,7 @@ func GetCommands(rows []optim.OptimizationResult) []Schedule {
 		gridCharge := scheduler.BatteryFirstGridChargeDisabled
 		soc := 10.0 // default load-first SoC
 		targetSOCFromOptimisation := row.SOCOpt()
-		if row.UnitLoadCost() == minPrice {
+		if row.UnitLoadCost() == minPrice || row.UnitLoadCost() == 0 {
 			// Inside cheap block
 			workMode = scheduler.WorkModeBatteryFirst
 			gridCharge = scheduler.BatteryFirstGridChargeEnabled

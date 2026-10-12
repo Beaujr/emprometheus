@@ -166,3 +166,53 @@ func TestHigherSOCInNextRowSchedule(t *testing.T) {
 func getNextThirtyMinuteSlot(t time.Time, hours int, minutes int) time.Time {
 	return t.Add(time.Duration(hours) * time.Hour).Truncate(time.Hour).Add(time.Duration(minutes) * time.Minute)
 }
+
+func TestSchedulerWithFreeSlotsGetCommands(t *testing.T) {
+	freeUnitLoadCost := 0.0
+	minUnitLoadCost := 1.0
+	maxUnitLoadCost := 10.0
+	medUnitLoadCost := 5.0
+	now := time.Now()
+	schedules := []types.OptimizationResult{
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 1, 0), 0.1, maxUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 1, 30), 0.1, maxUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 00), 0.1, maxUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 30), 0.5, freeUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 30), 0.5, minUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 3, 00), 1.0, minUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 3, 30), 0.8, medUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 4, 00), 0.7, medUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 4, 30), 0.7, minUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 5, 00), 0.7, maxUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 5, 30), 0.7, minUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 6, 00), 0.7, maxUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 6, 30), 0.7, freeUnitLoadCost, 0, 0),
+		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 7, 00), 0.7, maxUnitLoadCost, 0, 0),
+	}
+	schs := GetCommands(schedules)
+	if schs == nil {
+		t.Fail()
+		return
+	}
+
+	if len(schedules) != len(schs) {
+		t.Fail()
+		return
+	}
+	for _, sch := range schs {
+		t.Log(sch)
+		for _, result := range schedules {
+			if sch.time.Equal(result.Time()) {
+				if result.UnitLoadCost() == minUnitLoadCost || result.UnitLoadCost() == freeUnitLoadCost {
+					if sch.workmode != scheduler.WorkModeBatteryFirst {
+						t.Fail()
+					}
+					if sch.chargeBatteryFromGrid != scheduler.BatteryFirstGridChargeEnabled {
+						t.Fail()
+					}
+				}
+				break
+			}
+		}
+	}
+}
