@@ -124,47 +124,40 @@ func (o *Octopus) fetchSavingSessions(ctx context.Context) ([]Result, error) {
 		return nil, err
 	}
 	var results []Result
-	uk, err := time.LoadLocation("Europe/London")
-    if err != nil {
-        return nil, err
-    }
-	now := time.Now()
-	for _, edge := range events.Data.SavingSessions.Events {
-		startAt := time.Date(
-            edge.StartAt.Year(),
-            edge.StartAt.Month(),
-            edge.StartAt.Day(),
-            edge.StartAt.Hour(),
-            edge.StartAt.Minute(),
-            edge.StartAt.Second(),
-            edge.StartAt.Nanosecond(),
-            uk,
-        )
-		if startAt.Before(now) {
-			continue
-		}
-		if edge.EventType != "WEEKEND_HAPPY_HOUR" && edge.EventType != "TURN_UP" {
-			continue
-		}
 
-        endAt := time.Date(
-            edge.EndAt.Year(),
-            edge.EndAt.Month(),
-            edge.EndAt.Day(),
-            edge.EndAt.Hour(),
-            edge.EndAt.Minute(),
-            edge.EndAt.Second(),
-            edge.EndAt.Nanosecond(),
-            uk,
-        )
-		
-		
-		results = append(results, Result{
-			ValueExcVat: 0,
-			ValueIncVat: 0, // TURN_UP isn't 0 as its only above average usage that is free, TODO: model better
-			ValidFrom:   startAt,
-			ValidTo:     endAt,
-		})
-	}
+    uk, err := time.LoadLocation("Europe/London")
+    if err != nil {
+    	return nil, err
+    }
+
+    now := time.Now().In(uk)
+
+    toUKTime := func(t time.Time) time.Time {
+    	return time.Date(
+    		t.Year(), t.Month(), t.Day(),
+    		t.Hour(), t.Minute(), t.Second(),
+    		t.Nanosecond(), uk,
+    	)
+    }
+
+    for _, edge := range events.Data.SavingSessions.Events {
+    	if edge.EventType != "WEEKEND_HAPPY_HOUR" &&
+    		edge.EventType != "TURN_UP" {
+    		continue
+    	}
+
+    	startAt := toUKTime(edge.StartAt)
+    	if startAt.Before(now) {
+    		continue
+    	}
+
+    	results = append(results, Result{
+    		ValueExcVat: 0,
+    		ValueIncVat: 0, // TURN_UP is only free for above-average usage; TODO: model better
+    		ValidFrom:   startAt,
+	    	ValidTo:     toUKTime(edge.EndAt),
+    	})
+    }
+
 	return results, nil
 }
