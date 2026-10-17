@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 	_ "time/tzdata"
@@ -103,6 +104,7 @@ func (o *Octopus) graphqlSavingSessions(ctx context.Context, client *http.Client
 	if err != nil {
 		return nil, err
 	}
+	o.logger.Info("savingsession", slog.String("response", string(body)))
 	var hhResp SavingSessionResponse
 	if err = json.Unmarshal(body, &hhResp); err != nil {
 		return nil, err
