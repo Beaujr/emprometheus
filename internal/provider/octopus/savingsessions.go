@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 	"time"
-	_ "time/tzdata
+	_ "time/tzdata"
 )
 
 type SavingSessionResponse struct {
