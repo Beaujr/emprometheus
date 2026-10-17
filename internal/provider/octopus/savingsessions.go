@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"time"
+	_ "time/tzdata
 )
 
 type SavingSessionResponse struct {
@@ -121,19 +122,46 @@ func (o *Octopus) fetchSavingSessions(ctx context.Context) ([]Result, error) {
 		return nil, err
 	}
 	var results []Result
+	uk, err := time.LoadLocation("Europe/London")
+    if err != nil {
+        return nil, err
+    }
 	now := time.Now()
 	for _, edge := range events.Data.SavingSessions.Events {
-		if edge.StartAt.Before(now) {
+		startAt := time.Date(
+            edge.StartAt.Year(),
+            edge.StartAt.Month(),
+            edge.StartAt.Day(),
+            edge.StartAt.Hour(),
+            edge.StartAt.Minute(),
+            edge.StartAt.Second(),
+            edge.StartAt.Nanosecond(),
+            uk,
+        )
+		if startAt.Before(now) {
 			continue
 		}
 		if edge.EventType != "WEEKEND_HAPPY_HOUR" && edge.EventType != "TURN_UP" {
 			continue
 		}
+
+        endAt := time.Date(
+            edge.EndAt.Year(),
+            edge.EndAt.Month(),
+            edge.EndAt.Day(),
+            edge.EndAt.Hour(),
+            edge.EndAt.Minute(),
+            edge.EndAt.Second(),
+            edge.EndAt.Nanosecond(),
+            uk,
+        )
+		
+		
 		results = append(results, Result{
 			ValueExcVat: 0,
 			ValueIncVat: 0, // TURN_UP isn't 0 as its only above average usage that is free, TODO: model better
-			ValidFrom:   edge.StartAt,
-			ValidTo:     edge.EndAt,
+			ValidFrom:   startAt,
+			ValidTo:     endAt,
 		})
 	}
 	return results, nil
