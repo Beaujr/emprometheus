@@ -131,15 +131,6 @@ func (o *Octopus) fetchSavingSessions(ctx context.Context) ([]Result, error) {
     }
 
     now := time.Now().In(uk)
-
-    toUKTime := func(t time.Time) time.Time {
-    	return time.Date(
-    		t.Year(), t.Month(), t.Day(),
-    		t.Hour(), t.Minute(), t.Second(),
-    		t.Nanosecond(), uk,
-    	)
-    }
-
     for _, edge := range events.Data.SavingSessions.Events {
     	if edge.EventType != "WEEKEND_HAPPY_HOUR" &&
     		edge.EventType != "TURN_UP" {
@@ -154,8 +145,8 @@ func (o *Octopus) fetchSavingSessions(ctx context.Context) ([]Result, error) {
     	results = append(results, Result{
     		ValueExcVat: 0,
     		ValueIncVat: 0, // TURN_UP is only free for above-average usage; TODO: model better
-    		ValidFrom:   startAt,
-	    	ValidTo:     toUKTime(edge.EndAt),
+    		ValidFrom:   startAt.Add(-time.Hour), // todo fix post dst change eom oct
+	    	ValidTo:     edge.EndAt.Add(-time.Hour),
     	})
     }
 
