@@ -144,7 +144,7 @@ func (o *Octopus) fetchSavingSessions(ctx context.Context) ([]Result, error) {
     	results = append(results, Result{
     		ValueExcVat: 0,
     		ValueIncVat: 0, // TURN_UP is only free for above-average usage; TODO: model better
-    		ValidFrom:   startAt.Add(-time.Hour), // todo fix post dst change eom oct
+    		ValidFrom:   edge.StartAt.Add(-time.Hour), // todo fix post dst change eom oct
 	    	ValidTo:     edge.EndAt.Add(-time.Hour),
     	})
     }
