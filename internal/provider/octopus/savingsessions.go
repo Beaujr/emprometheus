@@ -137,8 +137,7 @@ func (o *Octopus) fetchSavingSessions(ctx context.Context) ([]Result, error) {
     		continue
     	}
 
-    	startAt := toUKTime(edge.StartAt)
-    	if startAt.Before(now) {
+    	if edge.StartAt.Before(now) {
     		continue
     	}
 
