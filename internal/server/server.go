@@ -174,7 +174,7 @@ func NewServer(ctx context.Context, logger *slog.Logger, ha *hass.Hass, password
 			0, 0, 0, 0,
 			time.Now().Location(),
 		)
-		rows, err := s.store.Select(startOfToday)
+		rows, err := s.store.Select(ctx, startOfToday)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}

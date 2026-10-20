@@ -188,7 +188,7 @@ func (f *FileStore) InsertOptimization(ctx context.Context, row types.Optimizati
 	return f.writeLines(f.optimpath, lines)
 }
 
-func (f *FileStore) SelectOptimization(start time.Time, optimization string) ([]types.OptimizationResult, error) {
+func (f *FileStore) SelectOptimization(ctx context.Context, start time.Time, optimization string) ([]types.OptimizationResult, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	lines, err := f.readLines(f.optimpath)
@@ -208,7 +208,7 @@ func (f *FileStore) SelectOptimization(start time.Time, optimization string) ([]
 	return results, nil
 }
 
-func (f *FileStore) DeleteAnyOptimization(start time.Time) error {
+func (f *FileStore) DeleteAnyOptimization(ctx context.Context, start time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	lines, err := f.readLines(f.optimpath)
@@ -232,7 +232,7 @@ func (f *FileStore) DeleteAnyOptimization(start time.Time) error {
 
 // SetActualSoc is a no-op for FileStore: OptimizationResult does not expose
 // an actual-SOC field, and the inverter workflow only logs a warning on failure.
-func (f *FileStore) SetActualSoc(_ time.Time, _ float64) error { return nil }
+func (f *FileStore) SetActualSoc(_ context.Context, _ time.Time, _ float64) error { return nil }
 
 // ── MinimalStore / schedule rows ──────────────────────────────────────────────
 
@@ -277,7 +277,7 @@ func (f *FileStore) Delete(ctx context.Context, row Row) error {
 	return f.writeLines(f.filepath, filtered)
 }
 
-func (f *FileStore) Find(start time.Time) (Row, error) {
+func (f *FileStore) Find(ctx context.Context, start time.Time) (Row, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	lines, err := f.readLines(f.filepath)
@@ -293,7 +293,7 @@ func (f *FileStore) Find(start time.Time) (Row, error) {
 	return Row{}, ErrNotFound
 }
 
-func (f *FileStore) Select(start time.Time) ([]Row, error) {
+func (f *FileStore) Select(ctx context.Context, start time.Time) ([]Row, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	lines, err := f.readLines(f.filepath)
@@ -315,7 +315,7 @@ func (f *FileStore) Select(start time.Time) ([]Row, error) {
 
 // ── StateAccessorStore ────────────────────────────────────────────────────────
 
-func (f *FileStore) SetSOC(soc int64) error {
+func (f *FileStore) SetSOC(ctx context.Context, soc int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s, err := f.readState()
@@ -326,14 +326,14 @@ func (f *FileStore) SetSOC(soc int64) error {
 	return f.writeState(s)
 }
 
-func (f *FileStore) GetSOC() (int64, error) {
+func (f *FileStore) GetSOC(ctx context.Context) (int64, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	s, err := f.readState()
 	return s.CurrentSOC, err
 }
 
-func (f *FileStore) SetDeviceMode(mode string) error {
+func (f *FileStore) SetDeviceMode(ctx context.Context, mode string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s, err := f.readState()
@@ -344,14 +344,14 @@ func (f *FileStore) SetDeviceMode(mode string) error {
 	return f.writeState(s)
 }
 
-func (f *FileStore) GetDeviceMode() (string, error) {
+func (f *FileStore) GetDeviceMode(ctx context.Context) (string, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	s, err := f.readState()
 	return s.CurrentDeviceMode, err
 }
 
-func (f *FileStore) SetBatteryFirstGridCharge(enabled string) error {
+func (f *FileStore) SetBatteryFirstGridCharge(ctx context.Context, enabled string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s, err := f.readState()
@@ -362,14 +362,14 @@ func (f *FileStore) SetBatteryFirstGridCharge(enabled string) error {
 	return f.writeState(s)
 }
 
-func (f *FileStore) GetBatteryFirstGridCharge() (string, error) {
+func (f *FileStore) GetBatteryFirstGridCharge(ctx context.Context) (string, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	s, err := f.readState()
 	return s.CurrentGridCharge, err
 }
 
-func (f *FileStore) SetBatteryFirstGridChargeTarget(enabled string) error {
+func (f *FileStore) SetBatteryFirstGridChargeTarget(ctx context.Context, enabled string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s, err := f.readState()
@@ -380,14 +380,14 @@ func (f *FileStore) SetBatteryFirstGridChargeTarget(enabled string) error {
 	return f.writeState(s)
 }
 
-func (f *FileStore) GetBatteryFirstGridChargeTarget() (string, error) {
+func (f *FileStore) GetBatteryFirstGridChargeTarget(ctx context.Context) (string, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	s, err := f.readState()
 	return s.TargetGridCharge, err
 }
 
-func (f *FileStore) SetSOCTarget(soc int64) error {
+func (f *FileStore) SetSOCTarget(ctx context.Context, soc int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s, err := f.readState()
@@ -398,14 +398,14 @@ func (f *FileStore) SetSOCTarget(soc int64) error {
 	return f.writeState(s)
 }
 
-func (f *FileStore) GetSOCTarget() (int64, error) {
+func (f *FileStore) GetSOCTarget(ctx context.Context) (int64, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	s, err := f.readState()
 	return s.TargetSoc, err
 }
 
-func (f *FileStore) SetDeviceModeTarget(mode string) error {
+func (f *FileStore) SetDeviceModeTarget(ctx context.Context, mode string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s, err := f.readState()
@@ -416,14 +416,14 @@ func (f *FileStore) SetDeviceModeTarget(mode string) error {
 	return f.writeState(s)
 }
 
-func (f *FileStore) GetDeviceModeTarget() (string, error) {
+func (f *FileStore) GetDeviceModeTarget(ctx context.Context) (string, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	s, err := f.readState()
 	return s.TargetDeviceMode, err
 }
 
-func (f *FileStore) SetLoadFirstStopDischarge(soc int64) error {
+func (f *FileStore) SetLoadFirstStopDischarge(ctx context.Context, soc int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s, err := f.readState()
@@ -434,7 +434,7 @@ func (f *FileStore) SetLoadFirstStopDischarge(soc int64) error {
 	return f.writeState(s)
 }
 
-func (f *FileStore) GetLoadFirstStopDischarge() (int64, error) {
+func (f *FileStore) GetLoadFirstStopDischarge(ctx context.Context) (int64, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	s, err := f.readState()

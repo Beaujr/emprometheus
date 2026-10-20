@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/beaujr/emprometheus/internal/store"
-	"github.com/beaujr/emprometheus/internal/store/sqlc"
 	"github.com/beaujr/emprometheus/internal/types"
 )
 
@@ -136,7 +135,7 @@ func GetCommands(rows []types.OptimizationResult) []Schedule {
 }
 
 func GenerateSchedules(ctx context.Context, logger *slog.Logger, db store.Store, t time.Time, method string) ([]Schedule, error) {
-	rows, err := db.SelectOptimization(t, method)
+	rows, err := db.SelectOptimization(ctx, t, method)
 	if err != nil {
 		return nil, err
 	}
@@ -152,14 +151,14 @@ func GenerateSchedules(ctx context.Context, logger *slog.Logger, db store.Store,
 		if schedule.time.After(lastScheduledTime) {
 			lastScheduledTime = schedule.time
 		}
-		if err = db.Upsert(ctx, store.Row{InsertScheduleParams: sqlc.InsertScheduleParams{
+		if err = db.Upsert(ctx, store.Row{
 			Optimization:     method,
 			Time:             schedule.time,
 			WorkMode:         schedule.workmode,
 			GridCharge:       schedule.chargeBatteryFromGrid,
 			StopDischargeSoc: schedule.soc,
 			TargetSoc:        schedule.TargetSoc,
-		}}); err != nil {
+		}); err != nil {
 			return nil, err
 		}
 	}

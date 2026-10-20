@@ -136,6 +136,7 @@ func main() {
 			if err != nil {
 				panic(err.Error())
 			}
+			defer psqldb.Close()
 			storeOpts = []store.Option{store.WithDB(sigkillCtx, psqldb)}
 		}
 		db, err := store.New(logger, storeOpts...)
@@ -152,9 +153,9 @@ func main() {
 		var sch scheduler.Scheduler = &scheduler.DebugScheduler{}
 		saOptions := []solarassistant.Option{solarassistant.WithOTEL()}
 		if *dsn != "" {
-			saOptions = append(saOptions, solarassistant.WithStateHandler(db))
+			saOptions = append(saOptions, solarassistant.WithStateHandler(sigkillCtx, db))
 		}
-		sa, err := solarassistant.New(logger.With(slog.String("pkg", "solarassistant")), saOptions...)
+		sa, err := solarassistant.New(sigkillCtx, logger.With(slog.String("pkg", "solarassistant")), saOptions...)
 		if err != nil {
 			panic(err.Error())
 		}

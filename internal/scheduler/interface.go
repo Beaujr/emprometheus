@@ -25,18 +25,18 @@ type SimplePowerPlant interface {
 
 type ControllablePowerPlant interface {
 	SimplePowerPlant
-	SetBatteryFirstGridCharge(enabled string) error
-	SetWorkModePriority(workmode string) error
-	SetLoadFirstStopDischargeState(soc int64) error
-	SetCurrentSOC(soc int64) error
-	GetCurrentSOC() (int64, error)
-	GetTargetSoc() (int64, error)
-	SetCurrentDeviceMode(mode string) error
-	GetCurrentDeviceMode() (string, error)
-	GetTargetDeviceMode() (string, error)
-	SetCurrentBatteryFirstGridCharge(gridFirstBatteryCharge string) error
-	GetCurrentBatteryFirstGridCharge() (string, error)
-	GetTargetBatteryFirstGridCharge() (string, error)
+	SetBatteryFirstGridCharge(ctx context.Context, enabled string) error
+	SetWorkModePriority(ctx context.Context, workmode string) error
+	SetLoadFirstStopDischargeState(ctx context.Context, soc int64) error
+	SetCurrentSOC(ctx context.Context, soc int64) error
+	GetCurrentSOC(ctx context.Context) (int64, error)
+	GetTargetSoc(ctx context.Context) (int64, error)
+	SetCurrentDeviceMode(ctx context.Context, mode string) error
+	GetCurrentDeviceMode(ctx context.Context) (string, error)
+	GetTargetDeviceMode(ctx context.Context) (string, error)
+	SetCurrentBatteryFirstGridCharge(ctx context.Context, gridFirstBatteryCharge string) error
+	GetCurrentBatteryFirstGridCharge(ctx context.Context) (string, error)
+	GetTargetBatteryFirstGridCharge(ctx context.Context) (string, error)
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
 }

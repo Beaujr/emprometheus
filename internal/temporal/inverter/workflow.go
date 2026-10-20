@@ -52,7 +52,7 @@ func (i *Inverter) Workflow(ctx workflow.Context, scheduleId, workmodepriority, 
 		logger.Warn("failed to delete schedule", slog.String("scheduleId", scheduleId))
 	}
 	logger.Info("Emprometheus workflow started", "workmodepriority", workmodepriority, "batteryfirstgridcharge", batteryfirstgridcharge, "soc", soc)
-	currentSoc, err := i.pp.GetCurrentSOC()
+	currentSoc, err := i.pp.GetCurrentSOC(dCtx)
 	if err != nil {
 		logger.Warn("failed to get current soc", slog.String("scheduleId", scheduleId))
 	}
@@ -61,7 +61,7 @@ func (i *Inverter) Workflow(ctx workflow.Context, scheduleId, workmodepriority, 
 		return "", err
 	}
 
-	if err = i.db.SetActualSoc(t, float64(currentSoc)/100); err != nil {
+	if err = i.db.SetActualSoc(dCtx, t, float64(currentSoc)/100); err != nil {
 		logger.Warn("failed to set actual soc", slog.String("scheduleId", scheduleId))
 	}
 	var result string
@@ -79,7 +79,7 @@ func (i *Inverter) Activity(ctx context.Context, workmodepriority, batteryfirstg
 	timestamp := t.Format(time.RFC3339)
 	logger := activity.GetLogger(ctx)
 	logger.Info("Activity Args", "workmodepriority", workmodepriority, "batteryfirstgridcharge", batteryfirstgridcharge, "soc", soc, "timestamp", timestamp)
-	r, err := i.db.Find(t)
+	r, err := i.db.Find(ctx, t)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
 			return "", err
