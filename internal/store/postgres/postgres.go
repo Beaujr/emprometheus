@@ -6,6 +6,7 @@ import (
 
 	"github.com/XSAM/otelsql"
 	"github.com/beaujr/emprometheus/internal/prometheus"
+	"github.com/beaujr/emprometheus/internal/telemetry"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 )
 
@@ -17,7 +18,7 @@ func New(dsn string) (*sql.DB, error) {
 
 	db, err := otelsql.Open("postgres", dsn, otelsql.WithAttributes(
 		attrs...,
-	), otelsql.WithMeterProvider(prometheus.GetMeterProvider()), otelsql.WithSQLCommenter(true))
+	), otelsql.WithMeterProvider(prometheus.GetMeterProvider()), otelsql.WithTracerProvider(telemetry.GetTraceProvider()), otelsql.WithSQLCommenter(true))
 	if err != nil {
 		return nil, err
 	}

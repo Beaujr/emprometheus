@@ -3,9 +3,13 @@ package temporal
 import (
 	"context"
 	"crypto/tls"
-	temporalsdk "go.temporal.io/sdk/client"
 	"log/slog"
 	"strings"
+
+	"github.com/beaujr/emprometheus/internal/telemetry"
+	temporalsdk "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/contrib/opentelemetry"
+	"go.temporal.io/sdk/interceptor"
 )
 
 type HeaderProvider struct {
@@ -27,12 +31,21 @@ func NewClient(logger *slog.Logger, address, ns string, useTLS bool) (temporalsd
 	if strings.Index(address, ":") > 0 {
 		host = address[0:strings.Index(address, ":")]
 	}
+	tracingInterceptor, err := opentelemetry.NewTracingInterceptor(
+		opentelemetry.TracerOptions{
+			Tracer: telemetry.GetTraceProvider().Tracer("temporal"),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
 	temporalClient, err := temporalsdk.Dial(temporalsdk.Options{
 		HostPort:          address,
 		Namespace:         ns,
 		Logger:            logger,
 		ConnectionOptions: connectionOptions,
 		HeadersProvider:   &HeaderProvider{headers: map[string]string{"host": host}},
+		Interceptors:      []interceptor.ClientInterceptor{tracingInterceptor},
 	})
 	return temporalClient, err
 }

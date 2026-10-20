@@ -6,6 +6,7 @@ replicaCount: 1
 
 promhass:
   args: []
+  env: []
 
 # the amount of steps in a 24 hour day, 24 = 60 in emhass, 48 = 30
 steps: 48
