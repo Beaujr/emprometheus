@@ -54,14 +54,14 @@ func (e *Emhass) Forecast(ctx context.Context, forecastMethod, body string) erro
 		return fmt.Errorf("forecast request returned HTTP status %d", resp.StatusCode)
 	}
 	logger := e.logger.With(slog.String("file", filepath.Join(e.dir, provider.CSVForecastName)))
-	if err = e.copyFile(logger, e.dir, provider.CSVForecastName, forecastMethod); err != nil {
+	if err = e.copyFile(ctx, logger, e.dir, provider.CSVForecastName, forecastMethod); err != nil {
 		logger.Error("error reading file", slog.String("error", err.Error()))
 		return err
 	}
 	return nil
 }
 
-func (e *Emhass) copyFile(logger *slog.Logger, dir, src, forecastMethod string) error {
+func (e *Emhass) copyFile(ctx context.Context, logger *slog.Logger, dir, src, forecastMethod string) error {
 	optimizationFile := filepath.Join(dir, src)
 	logger.Info("opening file")
 	sourceFile, err := os.Open(optimizationFile)
@@ -92,7 +92,7 @@ func (e *Emhass) copyFile(logger *slog.Logger, dir, src, forecastMethod string) 
 		if o.Time().After(priceHorizon) {
 			continue
 		}
-		err = e.db.InsertOptimization(o)
+		err = e.db.InsertOptimization(ctx, o)
 		if err != nil {
 			logger.Error("failed inserting optimization", slog.String("error", err.Error()))
 			return err

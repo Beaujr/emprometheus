@@ -25,11 +25,43 @@ services:
       dockerfile: Dockerfile
       args:
         APP_NAME: integration
-    command: [ "--emhass_url", "http://emhass:5000", "--dir", "/data" ]
+    command: [ "--emhass_url", "http://emhass:5000/action/", "--dir", "/data", "--dsn", "postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable" ]
     volumes:
       - ./emhass_config/share:/share
       - ./emhass_config/data:/data
       - /etc/localtime:/etc/localtime:ro
+    networks:
+      - emprometheus
+    depends_on:
+      - emhass
+      - dbmate
+  postgres:
+    image: postgres
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - emprometheus
+  dbmate:
+    image: amacneil/dbmate
+    container_name: dbmate
+    volumes:
+      - ./db:/db
+    environment:
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable"
+    command:
+      - up
+    depends_on:
+      - postgres
     networks:
       - emprometheus
 networks:

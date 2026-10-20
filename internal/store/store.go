@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/beaujr/emprometheus/internal/store/sqlc"
 	"github.com/beaujr/emprometheus/internal/types"
 )
 
@@ -27,10 +29,10 @@ type Store interface {
 }
 
 type OptimizationStore interface {
-	Insert(Row) error
-	Upsert(row Row) error
-	Delete(row Row) error
-	InsertOptimization(types.OptimizationResult) error
+	Insert(context.Context, Row) error
+	Upsert(context.Context, Row) error
+	Delete(context.Context, Row) error
+	InsertOptimization(context.Context, types.OptimizationResult) error
 	SelectOptimization(start time.Time, optimization string) ([]types.OptimizationResult, error)
 	DeleteAnyOptimization(start time.Time) error
 }
@@ -70,20 +72,15 @@ type StateAccessorStore interface {
 }
 
 type Row struct {
-	Optimization     string
-	Time             time.Time
-	WorkMode         string
-	GridCharge       string
-	StopDischargeSOC float64
-	TargetSOC        float64
+	sqlc.InsertScheduleParams
 }
 
 func (r Row) String() string {
-	return fmt.Sprintf("%s,%s,%s,%s,%.2f,%.2f", r.Optimization, r.Time.Format(time.RFC3339), r.WorkMode, r.GridCharge, r.StopDischargeSOC, r.TargetSOC)
+	return fmt.Sprintf("%s,%s,%s,%s,%.2f,%.2f", r.Optimization, r.Time.Format(time.RFC3339), r.WorkMode, r.GridCharge, r.StopDischargeSoc, r.TargetSoc)
 }
 
 func (r Row) StringWithTimezone(loc *time.Location) string {
-	return fmt.Sprintf("%s,%s,%s,%s,%.2f,%.2f", r.Optimization, r.Time.In(loc).Format(time.RFC3339), r.WorkMode, r.GridCharge, r.StopDischargeSOC, r.TargetSOC*100)
+	return fmt.Sprintf("%s,%s,%s,%s,%.2f,%.2f", r.Optimization, r.Time.In(loc).Format(time.RFC3339), r.WorkMode, r.GridCharge, r.StopDischargeSoc, r.TargetSoc*100)
 }
 
 func RowFromString(line string) (Row, error) {
@@ -103,16 +100,16 @@ func RowFromString(line string) (Row, error) {
 		r.Time = t
 		r.WorkMode = v[2]
 		r.GridCharge = v[3]
-		stopDischargeSOC, err := strconv.ParseFloat(v[4], 64)
+		StopDischargeSoc, err := strconv.ParseFloat(v[4], 64)
 		if err != nil {
 			return r, err
 		}
-		r.StopDischargeSOC = stopDischargeSOC
-		targetSOC, err := strconv.ParseFloat(v[5], 64)
+		r.StopDischargeSoc = StopDischargeSoc
+		TargetSoc, err := strconv.ParseFloat(v[5], 64)
 		if err != nil {
 			return r, err
 		}
-		r.TargetSOC = targetSOC
+		r.TargetSoc = TargetSoc
 
 	}
 	return r, nil
@@ -126,10 +123,10 @@ type storeConfig struct {
 
 type Option = func(s *storeConfig) error
 
-func WithDB(db *sql.DB) Option {
+func WithDB(ctx context.Context, db *sql.DB) Option {
 	return func(s *storeConfig) error {
-		s.p = &PostgresStore{logger: s.logger, db: db}
-		return s.p.migrations()
+		s.p = &PostgresStore{logger: s.logger, db: db, postgres: sqlc.New(db)}
+		return s.p.checkDB(ctx)
 	}
 }
 

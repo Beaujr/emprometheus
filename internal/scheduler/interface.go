@@ -30,7 +30,7 @@ type ControllablePowerPlant interface {
 	SetLoadFirstStopDischargeState(soc int64) error
 	SetCurrentSOC(soc int64) error
 	GetCurrentSOC() (int64, error)
-	GetTargetSOC() (int64, error)
+	GetTargetSoc() (int64, error)
 	SetCurrentDeviceMode(mode string) error
 	GetCurrentDeviceMode() (string, error)
 	GetTargetDeviceMode() (string, error)

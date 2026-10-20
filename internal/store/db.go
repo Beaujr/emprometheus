@@ -1,11 +1,12 @@
 package store
 
 import (
+	"context"
 	"database/sql"
-	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/beaujr/emprometheus/internal/store/sqlc"
 	"github.com/beaujr/emprometheus/internal/types"
 
 	_ "github.com/lib/pq"
@@ -17,19 +18,13 @@ const (
 )
 
 type PostgresStore struct {
-	db     *sql.DB
-	logger *slog.Logger
+	db       *sql.DB
+	postgres *sqlc.Queries
+	logger   *slog.Logger
 }
 
-func (p PostgresStore) Delete(row Row) error {
-	query := `
-delete from schedule where time = $1;
-`
-	_, err := p.db.Exec(
-		query,
-		row.Time,
-	)
-	return err
+func (p PostgresStore) Delete(ctx context.Context, row Row) error {
+	return p.postgres.DeleteSchedule(ctx, row.Time)
 }
 
 func (p PostgresStore) DeleteAnyOptimization(start time.Time) error {
@@ -43,166 +38,51 @@ delete from optimization_results where time = $1;
 	return err
 }
 
-func (p PostgresStore) InsertOptimization(r types.OptimizationResult) error {
-	query := `
-INSERT INTO optimization_results (
-	optimization,
-	time,
-	p_pv,
-	p_load,
-	p_grid_pos,
-	p_grid_neg,
-	p_grid,
-	p_batt,
-	soc_opt,
-	unit_load_cost,
-	unit_prod_price,
-	cost_profit,
-	cost_fun_profit,
-	optim_status
-)
-VALUES (
-	$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14
-)
-ON CONFLICT (optimization, time) DO UPDATE SET
-	p_pv = EXCLUDED.p_pv,
-	p_load = EXCLUDED.p_load,
-	p_grid_pos = EXCLUDED.p_grid_pos,
-	p_grid_neg = EXCLUDED.p_grid_neg,
-	p_grid = EXCLUDED.p_grid,
-	p_batt = EXCLUDED.p_batt,
-	soc_opt = EXCLUDED.soc_opt,
-	unit_load_cost = EXCLUDED.unit_load_cost,
-	unit_prod_price = EXCLUDED.unit_prod_price,
-	cost_profit = EXCLUDED.cost_profit,
-	cost_fun_profit = EXCLUDED.cost_fun_profit,
-	optim_status = EXCLUDED.optim_status;
-`
-	_, err := p.db.Exec(
-		query,
-		r.Optimization,
-		r.Time(),
-		r.PPV(),
-		r.PLoad(),
-		r.PGridPos(),
-		r.PGridNeg(),
-		r.PGrid(),
-		r.PBatt(),
-		r.SOCOpt(),
-		r.UnitLoadCost(),
-		r.UnitProdPrice(),
-		r.CostProfit(),
-		r.CostFunProfit(),
-		r.OptimStatus(),
-	)
+func (p PostgresStore) InsertOptimization(ctx context.Context, r types.OptimizationResult) error {
+	err := p.postgres.InsertOptimization(ctx, sqlc.InsertOptimizationParams{
+		Optimization:  r.Optimization,
+		Time:          r.Time(),
+		PPv:           r.PPV(),
+		PLoad:         r.PLoad(),
+		PGridPos:      r.PGridPos(),
+		PGridNeg:      r.PGridNeg(),
+		PGrid:         r.PGrid(),
+		PBatt:         r.PBatt(),
+		SocOpt:        r.SOCOpt(),
+		UnitLoadCost:  r.UnitLoadCost(),
+		UnitProdPrice: r.UnitProdPrice(),
+		CostProfit:    r.CostProfit(),
+		CostFunProfit: r.CostFunProfit(),
+		OptimStatus:   r.OptimStatus(),
+	})
 	return err
 
 }
 
-func (p PostgresStore) migrations() error {
-	var migrations []string
-	createTable := `
-	CREATE TABLE IF NOT EXISTS schedule (
-		time TIMESTAMPTZ PRIMARY KEY,
-		optimization TEXT NOT NULL,
-        work_mode TEXT NOT NULL,
-		grid_charge TEXT NOT NULL,
-		stop_discharge_soc DOUBLE PRECISION NOT NULL,
-		target_soc DOUBLE PRECISION NOT NULL
-	);
-	`
-	createOptimizationTable := `
-	CREATE TABLE IF NOT EXISTS optimization_results (
-		optimization TEXT NOT NULL,
-		time TIMESTAMPTZ NOT NULL,
-		p_pv DOUBLE PRECISION NOT NULL,
-		p_load DOUBLE PRECISION NOT NULL,
-		p_grid_pos DOUBLE PRECISION NOT NULL,
-		p_grid_neg DOUBLE PRECISION NOT NULL,
-		p_grid DOUBLE PRECISION NOT NULL,
-		p_batt DOUBLE PRECISION NOT NULL,
-		soc_opt DOUBLE PRECISION NOT NULL,
-		unit_load_cost DOUBLE PRECISION NOT NULL,
-		unit_prod_price DOUBLE PRECISION NOT NULL,
-		cost_profit DOUBLE PRECISION NOT NULL,
-		cost_fun_profit DOUBLE PRECISION NOT NULL,
-		optim_status TEXT NOT NULL,
-		PRIMARY KEY (optimization, time)
-	);
-	`
-	actualSocColumn := `
-	ALTER TABLE optimization_results
-	ADD COLUMN IF NOT EXISTS a_soc DOUBLE PRECISION NOT NULL DEFAULT 0;`
-
-	stateTable := `
-	CREATE TABLE IF NOT EXISTS inverter_settings (
-		soc BIGINT NOT NULL,
-		device_mode TEXT NOT NULL,
-		grid_charge TEXT NOT NULL,
-		state TEXT NOT NULL,
-		PRIMARY KEY (state)
-	);
-`
-
-	liveLoadFirstStopDischargeColumn := `
-	ALTER TABLE inverter_settings
-	ADD COLUMN IF NOT EXISTS load_first_stop_discharge BIGINT NOT NULL DEFAULT 10;`
-	migrations = append(migrations, createOptimizationTable, createTable, actualSocColumn, stateTable, liveLoadFirstStopDischargeColumn)
-	for _, migration := range migrations {
-		if _, err := p.db.Exec(migration); err != nil {
-			return err
-		}
-	}
-	settingsQuery := `
-		SELECT count(*)
-		FROM inverter_settings;
-	`
-	count := 0
-	err := p.db.QueryRow(settingsQuery).Scan(&count)
+func (p PostgresStore) checkDB(ctx context.Context) error {
+	count, err := p.postgres.CountInverterSettings(ctx)
 	if err != nil {
 		return err
 	}
 	if count == 0 {
 		inserts := []string{StateCurrent, StateTarget}
 		for _, i := range inserts {
-			q := fmt.Sprintf("insert into inverter_settings (soc, device_mode, grid_charge, state) values (10, 'Load First', 'Disabled', '%s');", i)
-			if _, err := p.db.Exec(q); err != nil {
+			err = p.postgres.InsertInverterSetting(ctx, sqlc.InsertInverterSettingParams{
+				Soc:        10,
+				DeviceMode: "Load First",
+				GridCharge: "Disabled",
+				State:      i,
+			})
+			if err != nil {
 				return err
 			}
 		}
-
 	}
 	return nil
-
 }
 
-func (p PostgresStore) Insert(row Row) error {
-	insert := `
-INSERT INTO schedule (
-	optimization,
-    time,
-	work_mode,
-	grid_charge,
-	stop_discharge_soc,
-	target_soc
-)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (time) DO UPDATE SET
-    optimization = EXCLUDED.optimization,
-	work_mode = EXCLUDED.work_mode,
-	grid_charge = EXCLUDED.grid_charge,
-	stop_discharge_soc = EXCLUDED.stop_discharge_soc,
-	target_soc = EXCLUDED.target_soc;
-`
-	_, err := p.db.Exec(insert,
-		row.Optimization,
-		row.Time,
-		row.WorkMode,
-		row.GridCharge,
-		row.StopDischargeSOC,
-		row.TargetSOC,
-	)
-	return err
+func (p PostgresStore) Insert(ctx context.Context, row Row) error {
+	return p.postgres.InsertSchedule(ctx, row.InsertScheduleParams)
 }
 
 func (p PostgresStore) Find(t time.Time) (Row, error) {
@@ -225,8 +105,8 @@ WHERE time = $1;
 		&row.Time,
 		&row.WorkMode,
 		&row.GridCharge,
-		&row.StopDischargeSOC,
-		&row.TargetSOC,
+		&row.StopDischargeSoc,
+		&row.TargetSoc,
 	)
 	if err != nil {
 		return Row{}, err
@@ -325,13 +205,13 @@ ORDER BY time ASC;
 
 	for rows.Next() {
 		var r Row
-		if err := rows.Scan(
+		if err = rows.Scan(
 			&r.Optimization,
 			&r.Time,
 			&r.WorkMode,
 			&r.GridCharge,
-			&r.StopDischargeSOC,
-			&r.TargetSOC,
+			&r.StopDischargeSoc,
+			&r.TargetSoc,
 		); err != nil {
 			return nil, err
 		}
@@ -344,8 +224,8 @@ ORDER BY time ASC;
 	return result, nil
 }
 
-func (p PostgresStore) Upsert(row Row) error {
-	return p.Insert(row)
+func (p PostgresStore) Upsert(ctx context.Context, row Row) error {
+	return p.Insert(ctx, row)
 }
 
 func (p PostgresStore) Close() error {
@@ -359,7 +239,6 @@ func (p PostgresStore) setField(state, field string, value any) error {
         WHERE state = $1;
 `
 	_, err := p.db.Exec(query, state, value)
-	//queryCounter.Add(context.Background(), 1, api.WithAttributes(attribute.Key("action").String(fmt.Sprintf("SetField%s%s", field, value))))
 	return err
 }
 
@@ -373,7 +252,6 @@ func (p PostgresStore) getField(state, field string, dest any) error {
 	if err != nil {
 		return err
 	}
-	//queryCounter.Add(context.Background(), 1, api.WithAttributes(attribute.Key("action").String(fmt.Sprintf("GetField%s%s", field, dest))))
 	return nil
 }
 

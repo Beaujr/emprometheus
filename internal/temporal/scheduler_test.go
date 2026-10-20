@@ -7,6 +7,7 @@ import (
 
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/store"
+	"github.com/beaujr/emprometheus/internal/store/sqlc"
 	"github.com/beaujr/emprometheus/internal/types"
 )
 
@@ -25,7 +26,7 @@ func TestSchedulerGetCommands(t *testing.T) {
 		types.NewOptimizationResult(now.Add(6*time.Hour), 0.7, maxUnitLoadCost, 0, 0),
 		types.NewOptimizationResult(now.Add(6*time.Hour), 0.7, minUnitLoadCost, 0, 0),
 	}
-	schs := GetCommands(schedules)
+	schs := scheduler.GetCommands(schedules)
 	if schs == nil {
 		t.Fail()
 		return
@@ -38,31 +39,31 @@ func TestSchedulerGetCommands(t *testing.T) {
 	chargeIdxs := []int{2, 3, 6, 8}
 	for idx, sch := range schs {
 		if slices.Contains(chargeIdxs, idx) {
-			if sch.chargeBatteryFromGrid != scheduler.BatteryFirstGridChargeEnabled {
+			if sch.ChargeBatteryFromGrid() != scheduler.BatteryFirstGridChargeEnabled {
 				t.Fail()
 				return
 			}
-			if sch.workmode != scheduler.WorkModeBatteryFirst {
+			if sch.Workmode() != scheduler.WorkModeBatteryFirst {
 				t.Fail()
 				return
 			}
 
-			if sch.targetSOC != (sch.soc / 100) {
+			if sch.TargetSoc != (sch.Soc() / 100) {
 				t.Fail()
 				return
 			}
 			continue
 		}
-		if sch.chargeBatteryFromGrid != scheduler.BatteryFirstGridChargeDisabled {
+		if sch.ChargeBatteryFromGrid() != scheduler.BatteryFirstGridChargeDisabled {
 			t.Fail()
 			return
 		}
-		if sch.workmode != scheduler.WorkModeLoadFirst {
+		if sch.Workmode() != scheduler.WorkModeLoadFirst {
 			t.Fail()
 			return
 		}
 
-		if sch.soc != 10 {
+		if sch.Soc() != 10 {
 			t.Fail()
 			return
 		}
@@ -87,7 +88,7 @@ func TestThirtyMinuteSchedule(t *testing.T) {
 		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 5, 00), 0.7, maxUnitLoadCost, 0, 0),
 		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 5, 30), 0.7, minUnitLoadCost, 0, 0),
 	}
-	schs := GetCommands(schedules)
+	schs := scheduler.GetCommands(schedules)
 	if schs == nil {
 		t.Fail()
 		return
@@ -100,12 +101,12 @@ func TestThirtyMinuteSchedule(t *testing.T) {
 	for _, sch := range schs {
 		t.Log(sch)
 		for _, result := range schedules {
-			if sch.time.Equal(result.Time()) {
+			if sch.Time().Equal(result.Time()) {
 				if result.UnitLoadCost() == minUnitLoadCost {
-					if sch.workmode != scheduler.WorkModeBatteryFirst {
+					if sch.Workmode() != scheduler.WorkModeBatteryFirst {
 						t.Fail()
 					}
-					if sch.chargeBatteryFromGrid != scheduler.BatteryFirstGridChargeEnabled {
+					if sch.ChargeBatteryFromGrid() != scheduler.BatteryFirstGridChargeEnabled {
 						t.Fail()
 					}
 				}
@@ -123,7 +124,7 @@ func TestHigherSOCInNextRowSchedule(t *testing.T) {
 		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 1, 30), 0.1, minUnitLoadCost, 0, 0),
 		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 2, 00), 1.0, maxUnitLoadCost, 0, 0),
 	}
-	schs := GetCommands(schedules)
+	schs := scheduler.GetCommands(schedules)
 	if schs == nil {
 		t.Fail()
 		return
@@ -135,25 +136,25 @@ func TestHigherSOCInNextRowSchedule(t *testing.T) {
 	}
 	t.Log("Optimization,time,Work Mode, Grid Charge, Stop Discharge at SOC, Target SOC")
 	for _, sch := range schs {
-		r := store.Row{
+		r := store.Row{InsertScheduleParams: sqlc.InsertScheduleParams{
 			Optimization:     "test",
-			Time:             sch.time,
-			WorkMode:         sch.workmode,
-			GridCharge:       sch.chargeBatteryFromGrid,
-			StopDischargeSOC: sch.soc,
-			TargetSOC:        sch.targetSOC,
-		}
+			Time:             sch.Time(),
+			WorkMode:         sch.Workmode(),
+			GridCharge:       sch.ChargeBatteryFromGrid(),
+			StopDischargeSoc: sch.Soc(),
+			TargetSoc:        sch.TargetSoc,
+		}}
 		t.Log(r.String())
 		for idx, result := range schedules {
-			if sch.time.Equal(result.Time()) {
+			if sch.Time().Equal(result.Time()) {
 				if result.UnitLoadCost() == minUnitLoadCost {
-					if sch.workmode != scheduler.WorkModeBatteryFirst {
+					if sch.Workmode() != scheduler.WorkModeBatteryFirst {
 						t.Fail()
 					}
-					if sch.chargeBatteryFromGrid != scheduler.BatteryFirstGridChargeEnabled {
+					if sch.ChargeBatteryFromGrid() != scheduler.BatteryFirstGridChargeEnabled {
 						t.Fail()
 					}
-					if sch.soc != (schedules[idx+1].SOCOpt() * 100) {
+					if sch.Soc() != (schedules[idx+1].SOCOpt() * 100) {
 						t.Fail()
 					}
 				}
@@ -189,7 +190,7 @@ func TestSchedulerWithFreeSlotsGetCommands(t *testing.T) {
 		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 6, 30), 0.7, freeUnitLoadCost, 0, 0),
 		types.NewOptimizationResult(getNextThirtyMinuteSlot(now, 7, 00), 0.7, maxUnitLoadCost, 0, 0),
 	}
-	schs := GetCommands(schedules)
+	schs := scheduler.GetCommands(schedules)
 	if schs == nil {
 		t.Fail()
 		return
@@ -202,12 +203,12 @@ func TestSchedulerWithFreeSlotsGetCommands(t *testing.T) {
 	for _, sch := range schs {
 		t.Log(sch)
 		for _, result := range schedules {
-			if sch.time.Equal(result.Time()) {
+			if sch.Time().Equal(result.Time()) {
 				if result.UnitLoadCost() == minUnitLoadCost || result.UnitLoadCost() == freeUnitLoadCost {
-					if sch.workmode != scheduler.WorkModeBatteryFirst {
+					if sch.Workmode() != scheduler.WorkModeBatteryFirst {
 						t.Fail()
 					}
-					if sch.chargeBatteryFromGrid != scheduler.BatteryFirstGridChargeEnabled {
+					if sch.ChargeBatteryFromGrid() != scheduler.BatteryFirstGridChargeEnabled {
 						t.Fail()
 					}
 				}

@@ -90,9 +90,9 @@ func (f *Forecaster) GetHorizonSOCActivity(_ context.Context) (float64, error) {
 		if err != nil {
 			return 0.0, err
 		}
-		return fiveHourstime.TargetSOC, nil
+		return fiveHourstime.TargetSoc, nil
 	}
-	return r.TargetSOC, nil
+	return r.TargetSoc, nil
 
 }
 

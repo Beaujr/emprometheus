@@ -41,20 +41,20 @@ func TestOptimizationFromString(t *testing.T) {
 					t.Fatalf("expected Optimization=opt1 got=%s", result.Optimization)
 				}
 
-				if !result.time.Equal(expectedTime) {
-					t.Fatalf("unexpected time: %v", result.time)
+				if !result.Time().Equal(expectedTime) {
+					t.Fatalf("unexpected time: %v", result.Time())
 				}
 
-				if result.pPV != 1058.6904660263276 {
-					t.Fatalf("expected pPV=1.1 got=%v", result.pPV)
+				if result.PPV() != 1058.6904660263276 {
+					t.Fatalf("expected pPV=1.1 got=%v", result.PPV())
 				}
 
-				if result.pLoad != 23.789941102433158 {
-					t.Fatalf("expected pLoad=2.2 got=%v", result.pLoad)
+				if result.PLoad() != 23.789941102433158 {
+					t.Fatalf("expected pLoad=2.2 got=%v", result.PLoad())
 				}
 
-				if result.optimStatus != "Optimal" {
-					t.Fatalf("expected optimStatus=SUCCESS got=%s", result.optimStatus)
+				if result.OptimStatus() != "Optimal" {
+					t.Fatalf("expected optimStatus=SUCCESS got=%s", result.OptimStatus())
 				}
 			},
 		},
@@ -127,21 +127,21 @@ func TestReadOptimizationResults(t *testing.T) {
 		t.Fatalf("expected Optimization=forecast-a got=%s", first.Optimization)
 	}
 
-	if first.pPV != 1.1 {
-		t.Fatalf("expected first pPV=1.1 got=%v", first.pPV)
+	if first.PPV() != 1.1 {
+		t.Fatalf("expected first pPV=1.1 got=%v", first.PPV())
 	}
 
-	if first.optimStatus != "SUCCESS" {
-		t.Fatalf("expected first optimStatus=SUCCESS got=%s", first.optimStatus)
+	if first.OptimStatus() != "SUCCESS" {
+		t.Fatalf("expected first optimStatus=SUCCESS got=%s", first.OptimStatus())
 	}
 
 	second := results[1]
 
-	if second.pPV != 11.1 {
-		t.Fatalf("expected second pPV=11.1 got=%v", second.pPV)
+	if second.PPV() != 11.1 {
+		t.Fatalf("expected second pPV=11.1 got=%v", second.PPV())
 	}
 
-	if second.optimStatus != "FAILED" {
-		t.Fatalf("expected second optimStatus=FAILED got=%s", second.optimStatus)
+	if second.OptimStatus() != "FAILED" {
+		t.Fatalf("expected second optimStatus=FAILED got=%s", second.OptimStatus())
 	}
 }

@@ -102,7 +102,7 @@ func (sa *SolarAssistant) Stop(_ context.Context) error {
 }
 
 func (sa *SolarAssistant) Status(_ context.Context) (batteryfirstgridcharge string, workmodepriority string, soc int64, err error) {
-	soc, err = sa.GetTargetSOC()
+	soc, err = sa.GetTargetSoc()
 	if err != nil {
 		return "", "", 0, err
 	}
@@ -221,7 +221,7 @@ applied:
 		}
 	}
 
-	return sa.SetTargetSOC(soc)
+	return sa.SetTargetSoc(soc)
 }
 
 type Option = func(s *SolarAssistant) error
@@ -349,7 +349,7 @@ func (sa *SolarAssistant) observe(_ context.Context, obs api.Observer) error {
 	default:
 		obs.ObserveInt64(batteryFirstGridChargeEnabled, 0, api.WithAttributes(targetAttrs))
 	}
-	tSoc, err := sa.GetTargetSOC()
+	tSoc, err := sa.GetTargetSoc()
 	if err != nil {
 		return err
 	}
@@ -458,11 +458,11 @@ func (sa *SolarAssistant) GetCurrentBatteryFirstGridCharge() (string, error) {
 	return sa.stateHandler.GetBatteryFirstGridCharge() // remove error later? or keep for compatibility?
 }
 
-func (sa *SolarAssistant) GetTargetSOC() (int64, error) {
+func (sa *SolarAssistant) GetTargetSoc() (int64, error) {
 	return sa.stateHandler.GetSOCTarget() // remove error later? or keep for compatibility?
 }
 
-func (sa *SolarAssistant) SetTargetSOC(soc int64) error {
+func (sa *SolarAssistant) SetTargetSoc(soc int64) error {
 	return sa.stateHandler.SetSOCTarget(soc) // remove error later? or keep for compatibility?
 }
 

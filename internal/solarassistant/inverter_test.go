@@ -216,7 +216,7 @@ var scenarios = []struct {
 	},
 }
 
-func TestIntervertCurrentSOCHigherThanTargetSOC(t *testing.T) {
+func TestIntervertCurrentSOCHigherThanTargetSoc(t *testing.T) {
 	var p scheduler.ControllablePowerPlant
 	fc := fakeclient{plant: p}
 	s, err := solarassistant.New(slog.New(slog.DiscardHandler), solarassistant.WithMqttClient(&fc))
@@ -256,12 +256,12 @@ func TestIntervertCurrentSOCHigherThanTargetSOC(t *testing.T) {
 				return
 			}
 			// review targets being handled
-			//targetSoC, err := s.GetTargetSOC()
+			//TargetSoc, err := s.GetTargetSoc()
 			//if err != nil {
 			//	t.Fatal(err)
 			//	return
 			//}
-			//if targetSoC != tt.targetBattery {
+			//if TargetSoc != tt.targetBattery {
 			//	t.Fail()
 			//}
 			//

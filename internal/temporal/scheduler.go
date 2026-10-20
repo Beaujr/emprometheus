@@ -1,23 +1,19 @@
 package temporal
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 	"time"
 
 	emhass2 "github.com/beaujr/emprometheus/internal/emhass"
-
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/store"
 	"github.com/beaujr/emprometheus/internal/temporal/emhass"
 	"github.com/beaujr/emprometheus/internal/temporal/inverter"
-	optim "github.com/beaujr/emprometheus/internal/types"
 	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
@@ -178,7 +174,7 @@ func (fs *Temporal) InitForecastSchedule(ctx context.Context) error {
 		if err = fs.db.DeleteAnyOptimization(optimization.Time); err != nil {
 			return err
 		}
-		if err = fs.db.Delete(optimization); err != nil {
+		if err = fs.db.Delete(ctx, optimization); err != nil {
 			return err
 		}
 	}
@@ -419,40 +415,14 @@ func (fs *Temporal) Run(ctx context.Context, method string) error {
 	return nil
 }
 
-type Schedule struct {
-	workmode, chargeBatteryFromGrid string
-	soc, targetSOC                  float64
-	time                            time.Time
-}
-
 func (fs *Temporal) output(ctx context.Context, method string) error {
-	rows, err := fs.db.SelectOptimization(time.Now(), method)
+	schedules, err := scheduler.GenerateSchedules(ctx, fs.logger, fs.db, time.Now(), method)
 	if err != nil {
 		return err
 	}
-
-	if len(rows) == 0 {
-		fs.logger.Info("No rows parsed.")
-		return nil
-	}
-	schedules := GetCommands(rows)
 	var lastScheduledTime time.Time
 	for _, schedule := range schedules {
-		fs.logger.Info(schedule.time.Format(time.RFC3339), slog.String("work mode", schedule.workmode), slog.String("battery first gridcharge", schedule.chargeBatteryFromGrid))
-		if schedule.time.After(lastScheduledTime) {
-			lastScheduledTime = schedule.time
-		}
-		if err = fs.db.Upsert(store.Row{
-			Optimization:     method,
-			Time:             schedule.time,
-			WorkMode:         schedule.workmode,
-			GridCharge:       schedule.chargeBatteryFromGrid,
-			StopDischargeSOC: schedule.soc,
-			TargetSOC:        schedule.targetSOC,
-		}); err != nil {
-			return err
-		}
-		if err = fs.process(ctx, schedule.time, schedule.workmode, schedule.chargeBatteryFromGrid, schedule.soc); err != nil {
+		if err = fs.process(ctx, schedule.Time(), schedule.Workmode(), schedule.ChargeBatteryFromGrid(), schedule.Soc()); err != nil {
 			fs.logger.Warn("error", slog.String("error", err.Error()))
 		}
 	}
@@ -461,105 +431,4 @@ func (fs *Temporal) output(ctx context.Context, method string) error {
 		return nil
 	}
 	return fs.scheduleForecastWorkflow(ctx, lastScheduledTime)
-}
-
-func GetCommands(rows []optim.OptimizationResult) []Schedule {
-	if len(rows) == 0 {
-		return nil
-	}
-	minGridRow := slices.MinFunc(rows, func(a, b optim.OptimizationResult) int {
-		// avoid setting rows with 0 cost as minGridRow
-		if a.UnitLoadCost() == 0 {
-			return 1
-		}
-		return cmp.Compare(a.UnitLoadCost(), b.UnitLoadCost())
-	})
-	minPrice := minGridRow.UnitLoadCost()
-
-	type block struct {
-		start int
-		end   int
-	}
-
-	var blocks []block
-	inBlock := false
-	startIdx := 0
-
-	for i := range rows {
-		if rows[i].UnitLoadCost() == minPrice || rows[i].UnitLoadCost() == 0 {
-			if !inBlock {
-				inBlock = true
-				startIdx = i
-			}
-		} else {
-			if inBlock {
-				blocks = append(blocks, block{start: startIdx, end: i - 1})
-				inBlock = false
-			}
-		}
-	}
-	if inBlock {
-		blocks = append(blocks, block{start: startIdx, end: len(rows) - 1})
-	}
-
-	monotonicSOC := make([]float64, len(rows))
-
-	for _, b := range blocks {
-		// First hour SoC target (converted to %)
-		lastSOC := rows[b.start].SOCOpt() * 100
-
-		for i := b.start; i <= b.end; i++ {
-			target := rows[i].SOCOpt() * 100
-
-			// Only allow increases inside the block
-			if target > lastSOC {
-				lastSOC = target
-			}
-
-			monotonicSOC[i] = lastSOC
-		}
-	}
-
-	var commands []Schedule
-	for i, row := range rows {
-		workMode := scheduler.WorkModeLoadFirst
-		gridCharge := scheduler.BatteryFirstGridChargeDisabled
-		soc := 10.0 // default load-first SoC
-		targetSOCFromOptimisation := row.SOCOpt()
-		if row.UnitLoadCost() == minPrice || row.UnitLoadCost() == 0 {
-			// Inside cheap block
-			workMode = scheduler.WorkModeBatteryFirst
-			gridCharge = scheduler.BatteryFirstGridChargeEnabled
-			tSoc := monotonicSOC[i]
-			// if its not the last index
-			if i != len(rows)-1 {
-				// if the next row is higher than this row
-				// set the target soc of this hour to reach that target soc
-				// rows are the bottom of the hour eg 16:00:00 70% soc, so 15:00:00 should set target soc to 70%
-				nextRowSocOpt := rows[i+1].SOCOpt() * 100
-				//nextRowUnitLoadCost := rows[i+1].UnitLoadCost
-				if nextRowSocOpt > tSoc {
-					tSoc = nextRowSocOpt
-				}
-			}
-			// if its equal to 10, which is the minimum, then no point setting charge vars
-			if tSoc == soc {
-				workMode = scheduler.WorkModeLoadFirst
-				gridCharge = scheduler.BatteryFirstGridChargeDisabled
-			}
-			soc = tSoc // ← monotonic enforced target
-		}
-		if workMode == scheduler.WorkModeBatteryFirst {
-			targetSOCFromOptimisation = soc / 100
-		}
-		commands = append(commands, Schedule{
-			time:                  row.Time(),
-			workmode:              workMode,
-			soc:                   soc,
-			chargeBatteryFromGrid: gridCharge,
-			targetSOC:             targetSOCFromOptimisation,
-		})
-	}
-
-	return commands
 }

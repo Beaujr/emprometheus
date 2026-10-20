@@ -1,0 +1,19 @@
+version: "2"
+sql:
+  - schema: "db/migrations"
+    queries: "db/queries.sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "sqlc"
+        out: "internal/store/sqlc"
+        sql_package: "database/sql"
+        overrides:
+          - column: "schedule.time"
+            go_type:
+              import: "time"
+              type: "Time"
+          - column: "optimization_results.time"
+            go_type:
+              import: "time"
+              type: "Time"

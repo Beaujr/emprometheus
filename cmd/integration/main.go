@@ -14,6 +14,8 @@ import (
 	_ "time/tzdata"
 
 	"github.com/beaujr/emprometheus/internal/emhass"
+	"github.com/beaujr/emprometheus/internal/scheduler"
+	"github.com/beaujr/emprometheus/internal/store/postgres"
 
 	"github.com/beaujr/emprometheus/internal/provider"
 	"github.com/beaujr/emprometheus/internal/provider/octopus"
@@ -25,13 +27,17 @@ import (
 var (
 	emhassUrl = flag.String("emhass_url", "http://localhost:5000/action/", "Emhass")
 	dir       = flag.String("dir", "./emhass_config/data", "the directory to serve files from")
+	dsn       = flag.String("dsn", "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable", "postgres dsn")
 )
 
 func main() {
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
-	db, err := store.New(logger, store.WithFilestore(*dir, provider.CSVScheduleName))
+	psqldb, err := postgres.New(*dsn)
+	if err != nil {
+		panic(err.Error())
+	}
+	db, err := store.New(logger, []store.Option{store.WithDB(context.Background(), psqldb)}...)
 	if err != nil {
 		panic(err)
 	}
@@ -67,6 +73,12 @@ func main() {
 		panic(err)
 	}
 	logger.Info("stored optimization results", slog.Int("rows", len(stored)))
+
+	schedules, err := scheduler.GenerateSchedules(context.Background(), logger, db, time.Now(), provider.ActionForecast)
+	if err != nil {
+		panic(err)
+	}
+	logger.Info("schedules results", slog.Int("rows", len(schedules)))
 }
 
 type FakePrometheus struct{}

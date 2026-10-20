@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"time"
+
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/store"
 	"go.temporal.io/sdk/client"
-	"log/slog"
-	"time"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/workflow"
@@ -85,7 +86,7 @@ func (i *Inverter) Activity(ctx context.Context, workmodepriority, batteryfirstg
 		}
 		logger.Warn("Unable to find schedule in database", "timestamp", t.Format(time.RFC3339))
 	}
-	logger.Info("Activity Stored", "workmodepriority", r.WorkMode, "batteryfirstgridcharge", r.GridCharge, "soc", r.TargetSOC, "timestamp", timestamp)
+	logger.Info("Activity Stored", "workmodepriority", r.WorkMode, "batteryfirstgridcharge", r.GridCharge, "soc", r.TargetSoc, "timestamp", timestamp)
 	if err = i.pp.Process(ctx, batteryfirstgridcharge, workmodepriority, int64(soc)); err != nil {
 		logger.Error("Processing failed.", "Error", err)
 		return "", err
