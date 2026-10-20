@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/beaujr/emprometheus/internal/store/sqlc"
 )
 
 var (
@@ -34,114 +36,107 @@ const (
 )
 
 type OptimizationResult struct {
-	Optimization  string
-	time          time.Time
-	pPV           float64
-	pLoad         float64
-	pGridPos      float64
-	pGridNeg      float64
-	pGrid         float64
-	pBatt         float64
-	socOpt        float64
-	unitLoadCost  float64
-	unitProdPrice float64
-	costProfit    float64
-	costFunProfit float64
-	optimStatus   string
+	sqlc.OptimizationResult
 }
 
 func (o OptimizationResult) String() string {
 	return fmt.Sprintf("%s,%s,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%s",
 		o.Optimization,
-		o.time.Format("2006-01-02 15:04:05-07:00"),
-		o.pPV,
-		o.pLoad,
-		o.pGridPos,
-		o.pGridNeg,
-		o.pGrid,
-		o.pBatt,
-		o.socOpt,
-		o.unitLoadCost,
-		o.unitProdPrice,
-		o.costProfit,
-		o.costFunProfit,
-		o.optimStatus,
+		o.Time().Format("2006-01-02 15:04:05-07:00"),
+		o.PPV(),
+		o.PLoad(),
+		o.PGridPos(),
+		o.PGridNeg(),
+		o.PGrid(),
+		o.PBatt(),
+		o.SOCOpt(),
+		o.UnitLoadCost(),
+		o.UnitProdPrice(),
+		o.CostProfit(),
+		o.CostFunProfit(),
+		o.OptimStatus(),
 	)
 }
 
 func NewOptimizationResult(time time.Time, socOpt, unitLoadCost, pPV, pBatt float64) OptimizationResult {
-	return OptimizationResult{time: time, socOpt: socOpt, unitLoadCost: unitLoadCost, pPV: pPV, pBatt: pBatt}
+	return OptimizationResult{sqlc.OptimizationResult{
+		Time:         time,
+		PPv:          pPV,
+		PBatt:        pBatt,
+		SocOpt:       socOpt,
+		UnitLoadCost: unitLoadCost,
+	}}
 }
 
 func NewOptimizationResultFull(optimization string, t time.Time, pPV, pLoad, pGridPos, pGridNeg, pGrid, pBatt, socOpt, unitLoadCost, unitProdPrice, costProfit, costFunProfit float64, optimStatus string) OptimizationResult {
-	return OptimizationResult{
+	return OptimizationResult{sqlc.OptimizationResult{
 		Optimization:  optimization,
-		time:          t,
-		pPV:           pPV,
-		pLoad:         pLoad,
-		pGridPos:      pGridPos,
-		pGridNeg:      pGridNeg,
-		pGrid:         pGrid,
-		pBatt:         pBatt,
-		socOpt:        socOpt,
-		unitLoadCost:  unitLoadCost,
-		unitProdPrice: unitProdPrice,
-		costProfit:    costProfit,
-		costFunProfit: costFunProfit,
-		optimStatus:   optimStatus,
-	}
+		Time:          t,
+		PPv:           pPV,
+		PLoad:         pLoad,
+		PGridPos:      pGridPos,
+		PGridNeg:      pGridNeg,
+		PGrid:         pGrid,
+		PBatt:         pBatt,
+		SocOpt:        socOpt,
+		UnitLoadCost:  unitLoadCost,
+		UnitProdPrice: unitProdPrice,
+		CostProfit:    costProfit,
+		CostFunProfit: costFunProfit,
+		OptimStatus:   optimStatus,
+	}}
 }
 
 func (o OptimizationResult) Time() time.Time {
-	return o.time
+	return o.OptimizationResult.Time
 }
 
 func (o OptimizationResult) PPV() float64 {
-	return o.pPV
+	return o.OptimizationResult.PPv
 }
 
 func (o OptimizationResult) PLoad() float64 {
-	return o.pLoad
+	return o.OptimizationResult.PLoad
 }
 
 func (o OptimizationResult) PGrid() float64 {
-	return o.pGrid
+	return o.OptimizationResult.PGrid
 }
 
 func (o OptimizationResult) PGridPos() float64 {
-	return o.pGridPos
+	return o.OptimizationResult.PGridPos
 }
 
 func (o OptimizationResult) PGridNeg() float64 {
-	return o.pGridNeg
+	return o.OptimizationResult.PGridNeg
 }
 
 func (o OptimizationResult) UnitLoadCost() float64 {
-	return o.unitLoadCost
+	return o.OptimizationResult.UnitLoadCost
 }
 
 func (o OptimizationResult) SOCOpt() float64 {
-	return o.socOpt
+	return o.OptimizationResult.SocOpt
 }
 
 func (o OptimizationResult) PBatt() float64 {
-	return o.pBatt
+	return o.OptimizationResult.PBatt
 }
 
 func (o OptimizationResult) UnitProdPrice() float64 {
-	return o.unitProdPrice
+	return o.OptimizationResult.UnitProdPrice
 }
 
 func (o OptimizationResult) CostProfit() float64 {
-	return o.costProfit
+	return o.OptimizationResult.CostProfit
 }
 
 func (o OptimizationResult) CostFunProfit() float64 {
-	return o.costFunProfit
+	return o.OptimizationResult.CostFunProfit
 }
 
 func (o OptimizationResult) OptimStatus() string {
-	return o.optimStatus
+	return o.OptimizationResult.OptimStatus
 }
 
 func ReadOptimizationResults(logger *slog.Logger, reader *bufio.Scanner, forecastMethod string) ([]OptimizationResult, error) {
@@ -268,19 +263,20 @@ func OptimizationFromString(logger *slog.Logger, mapping map[string]int, line st
 	}
 
 	return OptimizationResult{
-		Optimization:  r[0],
-		time:          t,
-		pPV:           pPV,
-		pLoad:         pLoad,
-		pGridPos:      pGridPos,
-		pGridNeg:      pGridNeg,
-		pGrid:         pGrid,
-		pBatt:         pBatt,
-		socOpt:        socOpt,
-		unitLoadCost:  unitLoadCost,
-		unitProdPrice: unitProdPrice,
-		costProfit:    costProfit,
-		costFunProfit: costFunProfit,
-		optimStatus:   r[mapping[optim_status]],
-	}, nil
+		sqlc.OptimizationResult{
+			Optimization:  r[0],
+			Time:          t,
+			PPv:           pPV,
+			PLoad:         pLoad,
+			PGridPos:      pGridPos,
+			PGridNeg:      pGridNeg,
+			PGrid:         pGrid,
+			PBatt:         pBatt,
+			SocOpt:        socOpt,
+			UnitLoadCost:  unitLoadCost,
+			UnitProdPrice: unitProdPrice,
+			CostProfit:    costProfit,
+			CostFunProfit: costFunProfit,
+			OptimStatus:   r[mapping[optim_status]],
+		}}, nil
 }

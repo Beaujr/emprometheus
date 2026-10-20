@@ -7,6 +7,7 @@ import (
 
 	"github.com/beaujr/emprometheus/internal/scheduler"
 	"github.com/beaujr/emprometheus/internal/store"
+	"github.com/beaujr/emprometheus/internal/store/sqlc"
 	"github.com/beaujr/emprometheus/internal/types"
 )
 
@@ -47,7 +48,7 @@ func TestSchedulerGetCommands(t *testing.T) {
 				return
 			}
 
-			if sch.targetSOC != (sch.soc / 100) {
+			if sch.TargetSoc != (sch.soc / 100) {
 				t.Fail()
 				return
 			}
@@ -135,14 +136,14 @@ func TestHigherSOCInNextRowSchedule(t *testing.T) {
 	}
 	t.Log("Optimization,time,Work Mode, Grid Charge, Stop Discharge at SOC, Target SOC")
 	for _, sch := range schs {
-		r := store.Row{
+		r := store.Row{InsertScheduleParams: sqlc.InsertScheduleParams{
 			Optimization:     "test",
 			Time:             sch.time,
 			WorkMode:         sch.workmode,
 			GridCharge:       sch.chargeBatteryFromGrid,
-			StopDischargeSOC: sch.soc,
-			TargetSOC:        sch.targetSOC,
-		}
+			StopDischargeSoc: sch.soc,
+			TargetSoc:        sch.TargetSoc,
+		}}
 		t.Log(r.String())
 		for idx, result := range schedules {
 			if sch.time.Equal(result.Time()) {

@@ -6,7 +6,7 @@ TYPE ?= image
 TAG ?= latest
 GOOS ?= linux
 GOARCH ?= amd64
-
+DB_URL ?= "postgres://postgres:postgres@192.168.1.92:5432/postgres?sslmode=disable"
 
 build:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build  \
@@ -24,8 +24,8 @@ integration-test:
 	docker compose -f docker-compose.yaml build promhass --no-cache
 	@set -e; \
 	trap 'docker compose -f docker-compose.yaml down' EXIT; \
-	docker compose -f docker-compose.yaml up -d emhass --wait; \
-	docker compose -f docker-compose.yaml up promhass
+	docker compose -f docker-compose.yaml up -d emhass postgres --wait; \
+	docker compose -f docker-compose.yaml up dbmate promhass
 
 
 docker:
@@ -42,3 +42,20 @@ docker:
 compose: releaser
 	docker compose -f docker-compose.yaml build
 	docker compose -f docker-compose.yaml up -d
+
+migrations:
+	docker run --rm \
+      -v "${shell pwd}/db:/db" \
+      -e DATABASE_URL=$(DB_URL) \
+      amacneil/dbmate up
+
+sqlc:
+	docker run --rm -v "${shell pwd}:/src" -w /src sqlc/sqlc generate
+
+postgres:
+	docker run -d --rm --name postgres \
+    -p 5432:5432 \
+    -e POSTGRES_PASSWORD="postgres" \
+    -e PGDATA=/var/lib/postgresql/data/pgdata \
+    --memory=4g --memory-swap=4g \
+    postgres

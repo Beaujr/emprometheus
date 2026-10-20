@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -21,7 +22,7 @@ type fileState struct {
 	CurrentDeviceMode             string `json:"current_device_mode"`
 	CurrentGridCharge             string `json:"current_grid_charge"`
 	CurrentLoadFirstStopDischarge int64  `json:"current_load_first_stop_discharge"`
-	TargetSOC                     int64  `json:"target_soc"`
+	TargetSoc                     int64  `json:"target_soc"`
 	TargetDeviceMode              string `json:"target_device_mode"`
 	TargetGridCharge              string `json:"target_grid_charge"`
 }
@@ -32,7 +33,7 @@ var defaultFileState = fileState{
 	CurrentDeviceMode:             "Load First",
 	CurrentGridCharge:             "Disabled",
 	CurrentLoadFirstStopDischarge: 10,
-	TargetSOC:                     10,
+	TargetSoc:                     10,
 	TargetDeviceMode:              "Load First",
 	TargetGridCharge:              "Disabled",
 }
@@ -164,7 +165,7 @@ func parseOptimizationLine(line string) (types.OptimizationResult, error) {
 
 // ── OptimizationStore ─────────────────────────────────────────────────────────
 
-func (f *FileStore) InsertOptimization(row types.OptimizationResult) error {
+func (f *FileStore) InsertOptimization(ctx context.Context, row types.OptimizationResult) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	lines, err := f.readLines(f.optimpath)
@@ -235,9 +236,9 @@ func (f *FileStore) SetActualSoc(_ time.Time, _ float64) error { return nil }
 
 // ── MinimalStore / schedule rows ──────────────────────────────────────────────
 
-func (f *FileStore) Insert(row Row) error { return f.Upsert(row) }
+func (f *FileStore) Insert(ctx context.Context, row Row) error { return f.Upsert(ctx, row) }
 
-func (f *FileStore) Upsert(row Row) error {
+func (f *FileStore) Upsert(ctx context.Context, row Row) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	lines, err := f.readLines(f.filepath)
@@ -259,7 +260,7 @@ func (f *FileStore) Upsert(row Row) error {
 	return f.writeLines(f.filepath, lines)
 }
 
-func (f *FileStore) Delete(row Row) error {
+func (f *FileStore) Delete(ctx context.Context, row Row) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	lines, err := f.readLines(f.filepath)
@@ -393,7 +394,7 @@ func (f *FileStore) SetSOCTarget(soc int64) error {
 	if err != nil {
 		return err
 	}
-	s.TargetSOC = soc
+	s.TargetSoc = soc
 	return f.writeState(s)
 }
 
@@ -401,7 +402,7 @@ func (f *FileStore) GetSOCTarget() (int64, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	s, err := f.readState()
-	return s.TargetSOC, err
+	return s.TargetSoc, err
 }
 
 func (f *FileStore) SetDeviceModeTarget(mode string) error {

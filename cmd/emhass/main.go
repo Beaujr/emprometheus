@@ -136,7 +136,7 @@ func main() {
 			if err != nil {
 				panic(err.Error())
 			}
-			storeOpts = []store.Option{store.WithDB(psqldb)}
+			storeOpts = []store.Option{store.WithDB(sigkillCtx, psqldb)}
 		}
 		db, err := store.New(logger, storeOpts...)
 		if err != nil {
