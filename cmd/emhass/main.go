@@ -15,6 +15,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/beaujr/emprometheus/internal/emhass"
+	"github.com/beaujr/emprometheus/internal/telemetry"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 
@@ -73,6 +74,7 @@ func main() {
 	flag.Parse()
 	sigkillCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill, syscall.SIGTERM)
 	defer stop()
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	var rateFetcher = func(ctx context.Context, steps int) error {
 		logger.Warn(fmt.Sprintf("rate fetcher is disabled, relying on %s already existing", provider.CSVFileName))
@@ -84,6 +86,14 @@ func main() {
 		logger.Error(err.Error())
 		panic(err)
 	}
+
+	tp, err := telemetry.InitTracer(sigkillCtx, "promhass")
+	if err != nil {
+		logger.Error("Failed to init telemetry:" + err.Error())
+		panic(err)
+	}
+	defer tp.Shutdown(sigkillCtx)
+
 	if *tariff {
 		if *octopusProduct != "" {
 			var opts []octopus.Option

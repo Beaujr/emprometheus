@@ -76,6 +76,11 @@ spec:
           {{- with .Values.promhass.args }}
             {{ toYaml . | nindent 12 }}
           {{- end }}
+          env:
+          {{- range $k, $v := .Values.promhass.env }}
+            - name: {{ $v.name }}
+              value: {{ $v.value }}
+          {{- end }}
           ports:
             - name: promhasshttp
               containerPort: {{ .Values.promhass_service.port }}
