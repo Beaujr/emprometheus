@@ -50,11 +50,17 @@ func (f *Forecaster) ForecastWorkflow(ctx workflow.Context) (string, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("forecast workflow started")
 
-	err := workflow.ExecuteActivity(ctx, f.ForecastActivity).Get(ctx, nil)
+	err := workflow.ExecuteActivity(ctx, f.LoadCostForecastActivity).Get(ctx, nil)
 	if err != nil {
 		if errors.Is(err, provider.ErrTariffNotAvailable) {
 			return "Not Ready", nil
 		}
+		logger.Error("Activity failed.", "Error", err)
+		return "", err
+	}
+
+	err = workflow.ExecuteActivity(ctx, f.ForecastActivity).Get(ctx, nil)
+	if err != nil {
 		logger.Error("Activity failed.", "Error", err)
 		return "", err
 	}
@@ -66,11 +72,13 @@ func (f *Forecaster) ForecastWorkflow(ctx workflow.Context) (string, error) {
 	return "OK", nil
 }
 
-func (f *Forecaster) ForecastActivity(ctx context.Context) error {
+func (f *Forecaster) LoadCostForecastActivity(ctx context.Context) error {
 	if err := f.tariff(ctx, f.steps); err != nil {
 		return err
 	}
-
+	return nil
+}
+func (f *Forecaster) ForecastActivity(ctx context.Context) error {
 	if err := f.em.Forecast(ctx, provider.ActionForecast, "{\"publish_prefix\":\"dh_\"}"); err != nil {
 		return err
 	}

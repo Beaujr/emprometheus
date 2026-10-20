@@ -51,7 +51,7 @@ func (fs *Temporal) Start(ctx context.Context) error {
 		}, {
 			queue:      emhass.TaskQueue,
 			workflow:   fs.f.ForecastWorkflow,
-			activities: []interface{}{fs.f.ForecastActivity, fs.f.BuildScheduleActivity},
+			activities: []interface{}{fs.f.LoadCostForecastActivity, fs.f.ForecastActivity, fs.f.BuildScheduleActivity},
 		},
 	}
 	if fs.mpc {
