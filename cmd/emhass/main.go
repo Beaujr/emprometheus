@@ -18,6 +18,7 @@ import (
 	"github.com/beaujr/emprometheus/internal/telemetry"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	p "github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
@@ -93,12 +94,17 @@ func main() {
 		panic(err)
 	}
 	defer tp.Shutdown(sigkillCtx)
-
+	client := &http.Client{
+		Transport: otelhttp.NewTransport(
+			http.DefaultTransport,
+			otelhttp.WithTracerProvider(tp),
+		),
+	}
 	if *tariff {
 		if *octopusProduct != "" {
 			var opts []octopus.Option
 			if len(*octopusAPIKey) > 0 && len(*octopusAccountNo) > 0 {
-				opts = append(opts, octopus.WithAPIKeyAndAccountNo(*octopusAPIKey, *octopusAccountNo))
+				opts = append(opts, octopus.WithAPIKeyAndAccountNo(*octopusAPIKey, *octopusAccountNo), octopus.WithClient(client))
 			}
 			rateFetcher = octopus.New(logger, *octopusProduct, *octopusTariff, *dir, loc, opts...).GenerateOctopusTariff
 		}
