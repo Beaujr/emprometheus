@@ -25,7 +25,7 @@ func (f *Forecaster) MPCWorkflow(ctx workflow.Context) (string, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("forecast workflow started")
 	// get current soc
-	v, err := f.getSoc()
+	v, err := f.getSoc(context.Background())
 	if err != nil {
 		return "", err
 	}
@@ -53,9 +53,9 @@ func (f *Forecaster) MPCWorkflow(ctx workflow.Context) (string, error) {
 	return "OK", nil
 }
 
-func (f *Forecaster) GetHorizonSOCActivity(_ context.Context) (float64, error) {
+func (f *Forecaster) GetHorizonSOCActivity(ctx context.Context) (float64, error) {
 	now := time.Now()
-	rows, err := f.db.Select(now)
+	rows, err := f.db.Select(ctx, now)
 	if err != nil {
 		return 0.0, err
 	}
@@ -79,7 +79,7 @@ func (f *Forecaster) GetHorizonSOCActivity(_ context.Context) (float64, error) {
 	f.horizon = int64(r.Time.Sub(now).Hours())
 	if f.horizon < 5 {
 		f.horizon = 5
-		fiveHourstime, err := f.db.Find(time.Date(
+		fiveHourstime, err := f.db.Find(ctx, time.Date(
 			now.Year(),
 			now.Month(),
 			now.Day(),

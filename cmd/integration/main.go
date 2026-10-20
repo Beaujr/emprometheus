@@ -63,18 +63,19 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = em.Forecast(context.Background(), "dayahead-optim", "")
+	ctx := context.Background()
+	err = em.Forecast(ctx, "dayahead-optim", "")
 	if err != nil {
 		panic(err)
 	}
 
-	stored, err := db.SelectOptimization(time.Now().Add(-24*time.Hour), provider.ActionForecast)
+	stored, err := db.SelectOptimization(ctx, time.Now().Add(-24*time.Hour), provider.ActionForecast)
 	if err != nil {
 		panic(err)
 	}
 	logger.Info("stored optimization results", slog.Int("rows", len(stored)))
 
-	schedules, err := scheduler.GenerateSchedules(context.Background(), logger, db, time.Now(), provider.ActionForecast)
+	schedules, err := scheduler.GenerateSchedules(ctx, logger, db, time.Now(), provider.ActionForecast)
 	if err != nil {
 		panic(err)
 	}

@@ -138,7 +138,7 @@ func (e *Emhass) getLoadForecastHorizon() (time.Time, error) {
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err = scanner.Err(); err != nil {
 		return time.Time{}, err
 	}
 

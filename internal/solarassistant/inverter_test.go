@@ -1,6 +1,7 @@
 package solarassistant_test
 
 import (
+	"context"
 	"log/slog"
 	"strconv"
 	"testing"
@@ -31,23 +32,24 @@ func (f fakeclient) Disconnect(quiesce uint) {
 }
 
 func (f fakeclient) Publish(topic string, qos byte, retained bool, msg interface{}) mqtt.Token {
+	ctx := context.Background()
 	switch topic {
 	case solarassistant.TopicSOCState:
 		batterySOC, err := strconv.ParseFloat(string(msg.([]byte)), 32)
 		if err != nil {
 			return fakeToken{}
 		}
-		err = f.plant.SetCurrentSOC(int64(batterySOC))
+		err = f.plant.SetCurrentSOC(ctx, int64(batterySOC))
 		if err != nil {
 			return nil
 		}
 	case solarassistant.TopicWorkModePriority:
-		err := f.plant.SetCurrentDeviceMode(msg.(string))
+		err := f.plant.SetCurrentDeviceMode(ctx, msg.(string))
 		if err != nil {
 			return nil
 		}
 	case solarassistant.TopicBatteryFirstGridCharge:
-		err := f.plant.SetCurrentBatteryFirstGridCharge(msg.(string))
+		err := f.plant.SetCurrentBatteryFirstGridCharge(ctx, msg.(string))
 		if err != nil {
 			return nil
 		}
@@ -56,7 +58,7 @@ func (f fakeclient) Publish(topic string, qos byte, retained bool, msg interface
 		if err != nil {
 			return fakeToken{}
 		}
-		if err = f.plant.SetLoadFirstStopDischargeState(int64(loadFirstStopDischarge)); err != nil {
+		if err = f.plant.SetLoadFirstStopDischargeState(ctx, int64(loadFirstStopDischarge)); err != nil {
 			return fakeToken{}
 		}
 	}
@@ -104,29 +106,29 @@ func (f fakeToken) Error() error {
 func TestSolarAssistant(t *testing.T) {
 	var p scheduler.ControllablePowerPlant
 	fc := fakeclient{plant: p}
-	s, err := solarassistant.New(slog.New(slog.DiscardHandler), solarassistant.WithMqttClient(&fc))
+	s, err := solarassistant.New(t.Context(), slog.New(slog.DiscardHandler), solarassistant.WithMqttClient(&fc))
 	if err != nil {
 		t.Fatal(err)
 		return
 	}
 	fc.plant = s
 
-	if err = s.SetLoadFirstStopDischarge(100); err != nil {
+	if err = s.SetLoadFirstStopDischarge(t.Context(), 100); err != nil {
 		t.Fatal(err)
 		return
 	}
-	if err = s.SetWorkModePriority(scheduler.WorkModeLoadFirst); err != nil {
+	if err = s.SetWorkModePriority(t.Context(), scheduler.WorkModeLoadFirst); err != nil {
 		t.Fatal(err)
 		return
 	}
-	if err = s.SetLoadFirstStopDischarge(100); err != nil {
+	if err = s.SetLoadFirstStopDischarge(t.Context(), 100); err != nil {
 		t.Fatal(err)
 		return
 	}
-	if err = s.SetCurrentSOC(100); err != nil {
+	if err = s.SetCurrentSOC(t.Context(), 100); err != nil {
 		t.Fatal(err)
 	}
-	soc, err := s.GetCurrentSOC()
+	soc, err := s.GetCurrentSOC(t.Context())
 	if err != nil {
 		t.Fatal(err)
 		return
@@ -219,7 +221,7 @@ var scenarios = []struct {
 func TestIntervertCurrentSOCHigherThanTargetSoc(t *testing.T) {
 	var p scheduler.ControllablePowerPlant
 	fc := fakeclient{plant: p}
-	s, err := solarassistant.New(slog.New(slog.DiscardHandler), solarassistant.WithMqttClient(&fc))
+	s, err := solarassistant.New(t.Context(), slog.New(slog.DiscardHandler), solarassistant.WithMqttClient(&fc))
 	if err != nil {
 		t.Fatal(err)
 		return
@@ -228,15 +230,15 @@ func TestIntervertCurrentSOCHigherThanTargetSoc(t *testing.T) {
 	for _, tt := range scenarios {
 		t.Run(tt.name, func(t *testing.T) {
 			// init
-			if err = s.SetCurrentSOC(tt.initialBattery); err != nil {
+			if err = s.SetCurrentSOC(t.Context(), tt.initialBattery); err != nil {
 				t.Fatal(err)
 				return
 			}
-			if err = s.SetCurrentDeviceMode(tt.initialWorkModePriority); err != nil {
+			if err = s.SetCurrentDeviceMode(t.Context(), tt.initialWorkModePriority); err != nil {
 				t.Fatal(err)
 				return
 			}
-			if err = s.SetCurrentBatteryFirstGridCharge(tt.initialBatteryFirstGridCharge); err != nil {
+			if err = s.SetCurrentBatteryFirstGridCharge(t.Context(), tt.initialBatteryFirstGridCharge); err != nil {
 				t.Fatal(err)
 				return
 			}
@@ -250,13 +252,13 @@ func TestIntervertCurrentSOCHigherThanTargetSoc(t *testing.T) {
 			// set some realtime change
 			//s.SetCurrentDeviceMode(tt.currentWorkModePriority)
 			//s.SetCurrentBatteryFirstGridCharge(tt.currentBatteryFirstGridCharge)
-			err = s.SetCurrentSOC(tt.currentBattery)
+			err = s.SetCurrentSOC(t.Context(), tt.currentBattery)
 			if err != nil {
 				t.Fatal(err)
 				return
 			}
 			// review targets being handled
-			//TargetSoc, err := s.GetTargetSoc()
+			//TargetSoc, err := s.GetTarGetSoc(ctx context.Context)
 			//if err != nil {
 			//	t.Fatal(err)
 			//	return
@@ -272,7 +274,7 @@ func TestIntervertCurrentSOCHigherThanTargetSoc(t *testing.T) {
 			//	t.Fail()
 			//}
 
-			soc, err := s.GetCurrentSOC()
+			soc, err := s.GetCurrentSOC(t.Context())
 			if err != nil {
 				t.Fatal(err)
 				return
@@ -281,7 +283,7 @@ func TestIntervertCurrentSOCHigherThanTargetSoc(t *testing.T) {
 				t.Fatal(err)
 				return
 			}
-			deviceMode, err := s.GetCurrentDeviceMode()
+			deviceMode, err := s.GetCurrentDeviceMode(t.Context())
 			if err != nil {
 				t.Fatal(err)
 				return
@@ -290,7 +292,7 @@ func TestIntervertCurrentSOCHigherThanTargetSoc(t *testing.T) {
 				t.Fail()
 			}
 
-			batteryFirstGridCharge, err := s.GetCurrentBatteryFirstGridCharge()
+			batteryFirstGridCharge, err := s.GetCurrentBatteryFirstGridCharge(t.Context())
 			if err != nil {
 				t.Fatal(err)
 				return

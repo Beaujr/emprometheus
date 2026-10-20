@@ -166,12 +166,12 @@ func (fs *Temporal) InitForecastSchedule(ctx context.Context) error {
 			}
 		}
 	}
-	optimizations, err := fs.db.Select(time.Now())
+	optimizations, err := fs.db.Select(ctx, time.Now())
 	if err != nil {
 		return err
 	}
 	for _, optimization := range optimizations {
-		if err = fs.db.DeleteAnyOptimization(optimization.Time); err != nil {
+		if err = fs.db.DeleteAnyOptimization(ctx, optimization.Time); err != nil {
 			return err
 		}
 		if err = fs.db.Delete(ctx, optimization); err != nil {

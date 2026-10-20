@@ -22,6 +22,15 @@ func (q *Queries) CountInverterSettings(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const deleteOptimizationResultAtTime = `-- name: DeleteOptimizationResultAtTime :exec
+delete from optimization_results where time = $1
+`
+
+func (q *Queries) DeleteOptimizationResultAtTime(ctx context.Context, argTime time.Time) error {
+	_, err := q.db.ExecContext(ctx, deleteOptimizationResultAtTime, argTime)
+	return err
+}
+
 const deleteSchedule = `-- name: DeleteSchedule :exec
 delete from schedule where time = $1
 `
@@ -29,6 +38,149 @@ delete from schedule where time = $1
 func (q *Queries) DeleteSchedule(ctx context.Context, argTime time.Time) error {
 	_, err := q.db.ExecContext(ctx, deleteSchedule, argTime)
 	return err
+}
+
+const getDeviceMode = `-- name: GetDeviceMode :one
+SELECT device_mode
+FROM inverter_settings
+WHERE state = $1
+    LIMIT 1
+`
+
+func (q *Queries) GetDeviceMode(ctx context.Context, state string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getDeviceMode, state)
+	var device_mode string
+	err := row.Scan(&device_mode)
+	return device_mode, err
+}
+
+const getGridCharge = `-- name: GetGridCharge :one
+SELECT grid_charge
+FROM inverter_settings
+WHERE state = $1
+    LIMIT 1
+`
+
+func (q *Queries) GetGridCharge(ctx context.Context, state string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getGridCharge, state)
+	var grid_charge string
+	err := row.Scan(&grid_charge)
+	return grid_charge, err
+}
+
+const getLoadFirstStopDischarge = `-- name: GetLoadFirstStopDischarge :one
+SELECT load_first_stop_discharge
+FROM inverter_settings
+WHERE state = $1
+    LIMIT 1
+`
+
+func (q *Queries) GetLoadFirstStopDischarge(ctx context.Context, state string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getLoadFirstStopDischarge, state)
+	var load_first_stop_discharge int64
+	err := row.Scan(&load_first_stop_discharge)
+	return load_first_stop_discharge, err
+}
+
+const getSOC = `-- name: GetSOC :one
+SELECT soc
+FROM inverter_settings
+WHERE state = $1
+    LIMIT 1
+`
+
+func (q *Queries) GetSOC(ctx context.Context, state string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getSOC, state)
+	var soc int64
+	err := row.Scan(&soc)
+	return soc, err
+}
+
+const getScheduleByTime = `-- name: GetScheduleByTime :one
+SELECT
+    optimization,
+    time,
+    work_mode,
+    grid_charge,
+    stop_discharge_soc,
+    target_soc
+FROM schedule
+WHERE time = $1
+`
+
+type GetScheduleByTimeRow struct {
+	Optimization     string
+	Time             time.Time
+	WorkMode         string
+	GridCharge       string
+	StopDischargeSoc float64
+	TargetSoc        float64
+}
+
+func (q *Queries) GetScheduleByTime(ctx context.Context, argTime time.Time) (GetScheduleByTimeRow, error) {
+	row := q.db.QueryRowContext(ctx, getScheduleByTime, argTime)
+	var i GetScheduleByTimeRow
+	err := row.Scan(
+		&i.Optimization,
+		&i.Time,
+		&i.WorkMode,
+		&i.GridCharge,
+		&i.StopDischargeSoc,
+		&i.TargetSoc,
+	)
+	return i, err
+}
+
+const getSchedulesAfterTime = `-- name: GetSchedulesAfterTime :many
+SELECT
+    optimization,
+    time,
+    work_mode,
+    grid_charge,
+    stop_discharge_soc,
+    target_soc
+FROM schedule
+WHERE time >= $1
+ORDER BY time ASC
+`
+
+type GetSchedulesAfterTimeRow struct {
+	Optimization     string
+	Time             time.Time
+	WorkMode         string
+	GridCharge       string
+	StopDischargeSoc float64
+	TargetSoc        float64
+}
+
+func (q *Queries) GetSchedulesAfterTime(ctx context.Context, argTime time.Time) ([]GetSchedulesAfterTimeRow, error) {
+	rows, err := q.db.QueryContext(ctx, getSchedulesAfterTime, argTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSchedulesAfterTimeRow
+	for rows.Next() {
+		var i GetSchedulesAfterTimeRow
+		if err := rows.Scan(
+			&i.Optimization,
+			&i.Time,
+			&i.WorkMode,
+			&i.GridCharge,
+			&i.StopDischargeSoc,
+			&i.TargetSoc,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const insertInverterSetting = `-- name: InsertInverterSetting :exec
@@ -161,5 +313,135 @@ func (q *Queries) InsertSchedule(ctx context.Context, arg InsertScheduleParams) 
 		arg.StopDischargeSoc,
 		arg.TargetSoc,
 	)
+	return err
+}
+
+const selectOptimizationByTimeAndOptimization = `-- name: SelectOptimizationByTimeAndOptimization :many
+SELECT
+    time, p_pv, p_batt, soc_opt, unit_load_cost
+FROM optimization_results
+WHERE time >= $1 AND optimization = $2
+ORDER BY time ASC
+`
+
+type SelectOptimizationByTimeAndOptimizationParams struct {
+	Time         time.Time
+	Optimization string
+}
+
+type SelectOptimizationByTimeAndOptimizationRow struct {
+	Time         time.Time
+	PPv          float64
+	PBatt        float64
+	SocOpt       float64
+	UnitLoadCost float64
+}
+
+func (q *Queries) SelectOptimizationByTimeAndOptimization(ctx context.Context, arg SelectOptimizationByTimeAndOptimizationParams) ([]SelectOptimizationByTimeAndOptimizationRow, error) {
+	rows, err := q.db.QueryContext(ctx, selectOptimizationByTimeAndOptimization, arg.Time, arg.Optimization)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SelectOptimizationByTimeAndOptimizationRow
+	for rows.Next() {
+		var i SelectOptimizationByTimeAndOptimizationRow
+		if err := rows.Scan(
+			&i.Time,
+			&i.PPv,
+			&i.PBatt,
+			&i.SocOpt,
+			&i.UnitLoadCost,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setActualSocAtTime = `-- name: SetActualSocAtTime :exec
+UPDATE optimization_results
+SET a_soc = $1
+WHERE time = $2
+`
+
+type SetActualSocAtTimeParams struct {
+	ASoc float64
+	Time time.Time
+}
+
+func (q *Queries) SetActualSocAtTime(ctx context.Context, arg SetActualSocAtTimeParams) error {
+	_, err := q.db.ExecContext(ctx, setActualSocAtTime, arg.ASoc, arg.Time)
+	return err
+}
+
+const setDeviceMode = `-- name: SetDeviceMode :exec
+UPDATE inverter_settings
+SET device_mode = $1
+WHERE state = $2
+`
+
+type SetDeviceModeParams struct {
+	DeviceMode string
+	State      string
+}
+
+func (q *Queries) SetDeviceMode(ctx context.Context, arg SetDeviceModeParams) error {
+	_, err := q.db.ExecContext(ctx, setDeviceMode, arg.DeviceMode, arg.State)
+	return err
+}
+
+const setGridCharge = `-- name: SetGridCharge :exec
+UPDATE inverter_settings
+SET grid_charge = $1
+WHERE state = $2
+`
+
+type SetGridChargeParams struct {
+	GridCharge string
+	State      string
+}
+
+func (q *Queries) SetGridCharge(ctx context.Context, arg SetGridChargeParams) error {
+	_, err := q.db.ExecContext(ctx, setGridCharge, arg.GridCharge, arg.State)
+	return err
+}
+
+const setLoadFirstStopDischarge = `-- name: SetLoadFirstStopDischarge :exec
+UPDATE inverter_settings
+SET load_first_stop_discharge = $1
+WHERE state = $2
+`
+
+type SetLoadFirstStopDischargeParams struct {
+	LoadFirstStopDischarge int64
+	State                  string
+}
+
+func (q *Queries) SetLoadFirstStopDischarge(ctx context.Context, arg SetLoadFirstStopDischargeParams) error {
+	_, err := q.db.ExecContext(ctx, setLoadFirstStopDischarge, arg.LoadFirstStopDischarge, arg.State)
+	return err
+}
+
+const setSOC = `-- name: SetSOC :exec
+UPDATE inverter_settings
+SET soc = $1
+WHERE state = $2
+`
+
+type SetSOCParams struct {
+	Soc   int64
+	State string
+}
+
+func (q *Queries) SetSOC(ctx context.Context, arg SetSOCParams) error {
+	_, err := q.db.ExecContext(ctx, setSOC, arg.Soc, arg.State)
 	return err
 }

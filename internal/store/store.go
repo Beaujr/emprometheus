@@ -33,46 +33,62 @@ type OptimizationStore interface {
 	Upsert(context.Context, Row) error
 	Delete(context.Context, Row) error
 	InsertOptimization(context.Context, types.OptimizationResult) error
-	SelectOptimization(start time.Time, optimization string) ([]types.OptimizationResult, error)
-	DeleteAnyOptimization(start time.Time) error
+	SelectOptimization(ctx context.Context, start time.Time, optimization string) ([]types.OptimizationResult, error)
+	DeleteAnyOptimization(context.Context, time.Time) error
 }
 
 type MinimalStore interface {
-	Select(start time.Time) ([]Row, error)
-	Find(start time.Time) (Row, error)
-	SetActualSoc(socTime time.Time, soc float64) error
+	Select(ctx context.Context, start time.Time) ([]Row, error)
+	Find(ctx context.Context, start time.Time) (Row, error)
+	SetActualSoc(ctx context.Context, socTime time.Time, soc float64) error
 }
 
 type StateStore interface {
-	SetSoc(soc int64) error
-	SetDeviceMode(deviceMode string) error
-	SetGridCharge(gridCharge string) error
-	GetSoc() (int64, error)
-	GetDeviceMode() (string, error)
-	GetGridCharge() (string, error)
-	SetLoadFirstStopDischarge(soc int64) error
-	GetLoadFirstStopDischarge() (int64, error)
+	SetSoc(ctx context.Context, soc int64) error
+	SetDeviceMode(ctx context.Context, deviceMode string) error
+	SetGridCharge(ctx context.Context, gridCharge string) error
+	GetSoc(ctx context.Context) (int64, error)
+	GetDeviceMode(ctx context.Context) (string, error)
+	GetGridCharge(ctx context.Context) (string, error)
+	SetLoadFirstStopDischarge(ctx context.Context, soc int64) error
+	GetLoadFirstStopDischarge(ctx context.Context) (int64, error)
 }
 
 type StateAccessorStore interface {
-	SetBatteryFirstGridCharge(enabled string) error
-	SetSOC(soc int64) error
-	SetDeviceMode(mode string) error
-	GetBatteryFirstGridCharge() (string, error)
-	GetSOC() (int64, error)
-	GetDeviceMode() (string, error)
-	SetBatteryFirstGridChargeTarget(enabled string) error
-	SetSOCTarget(soc int64) error
-	SetDeviceModeTarget(mode string) error
-	GetBatteryFirstGridChargeTarget() (string, error)
-	GetSOCTarget() (int64, error)
-	GetDeviceModeTarget() (string, error)
-	SetLoadFirstStopDischarge(soc int64) error
-	GetLoadFirstStopDischarge() (int64, error)
+	SetBatteryFirstGridCharge(ctx context.Context, enabled string) error
+	SetSOC(ctx context.Context, soc int64) error
+	SetDeviceMode(ctx context.Context, mode string) error
+	GetBatteryFirstGridCharge(ctx context.Context) (string, error)
+	GetSOC(ctx context.Context) (int64, error)
+	GetDeviceMode(ctx context.Context) (string, error)
+	SetBatteryFirstGridChargeTarget(ctx context.Context, enabled string) error
+	SetSOCTarget(ctx context.Context, soc int64) error
+	SetDeviceModeTarget(ctx context.Context, mode string) error
+	GetBatteryFirstGridChargeTarget(ctx context.Context) (string, error)
+	GetSOCTarget(ctx context.Context) (int64, error)
+	GetDeviceModeTarget(ctx context.Context) (string, error)
+	SetLoadFirstStopDischarge(ctx context.Context, soc int64) error
+	GetLoadFirstStopDischarge(ctx context.Context) (int64, error)
 }
 
 type Row struct {
-	sqlc.InsertScheduleParams
+	Optimization     string
+	Time             time.Time
+	WorkMode         string
+	GridCharge       string
+	StopDischargeSoc float64
+	TargetSoc        float64
+}
+
+func (r Row) toInsert() sqlc.InsertScheduleParams {
+	return sqlc.InsertScheduleParams{
+		Optimization:     r.Optimization,
+		Time:             r.Time,
+		WorkMode:         r.WorkMode,
+		GridCharge:       r.GridCharge,
+		StopDischargeSoc: r.StopDischargeSoc,
+		TargetSoc:        r.TargetSoc,
+	}
 }
 
 func (r Row) String() string {
@@ -125,7 +141,7 @@ type Option = func(s *storeConfig) error
 
 func WithDB(ctx context.Context, db *sql.DB) Option {
 	return func(s *storeConfig) error {
-		s.p = &PostgresStore{logger: s.logger, db: db, postgres: sqlc.New(db)}
+		s.p = &PostgresStore{logger: s.logger, postgres: sqlc.New(db)}
 		return s.p.checkDB(ctx)
 	}
 }

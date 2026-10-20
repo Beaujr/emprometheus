@@ -23,7 +23,7 @@ const (
 
 type Forecaster struct {
 	tariff  provider.RateFetcher
-	getSoc  func() (int64, error)
+	getSoc  GetSoc
 	em      *emhass.Emhass
 	horizon int64
 	db      store.MinimalStore
@@ -32,7 +32,7 @@ type Forecaster struct {
 }
 
 type Run = func(ctx context.Context, method string) error
-type GetSoc = func() (int64, error)
+type GetSoc = func(ctx context.Context) (int64, error)
 
 func New(tariff provider.RateFetcher, getSoc GetSoc, run Run, em *emhass.Emhass, db store.Store, steps int) *Forecaster {
 	return &Forecaster{tariff: tariff, getSoc: getSoc, run: run, em: em, horizon: 6, db: db, steps: steps}

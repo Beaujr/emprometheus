@@ -61,3 +61,84 @@ VALUES (
                                             cost_fun_profit = EXCLUDED.cost_fun_profit,
                                             optim_status = EXCLUDED.optim_status;
 
+-- name: GetScheduleByTime :one
+SELECT
+    optimization,
+    time,
+    work_mode,
+    grid_charge,
+    stop_discharge_soc,
+    target_soc
+FROM schedule
+WHERE time = $1;
+
+-- name: DeleteOptimizationResultAtTime :exec
+delete from optimization_results where time = $1;
+
+-- name: SelectOptimizationByTimeAndOptimization :many
+SELECT
+    time, p_pv, p_batt, soc_opt, unit_load_cost
+FROM optimization_results
+WHERE time >= $1 AND optimization = $2
+ORDER BY time ASC;
+
+-- name: SetActualSocAtTime :exec
+UPDATE optimization_results
+SET a_soc = $1
+WHERE time = $2;
+
+-- name: GetSchedulesAfterTime :many
+SELECT
+    optimization,
+    time,
+    work_mode,
+    grid_charge,
+    stop_discharge_soc,
+    target_soc
+FROM schedule
+WHERE time >= $1
+ORDER BY time ASC;
+
+-- name: SetSOC :exec
+UPDATE inverter_settings
+SET soc = $1
+WHERE state = $2;
+
+-- name: GetSOC :one
+SELECT soc
+FROM inverter_settings
+WHERE state = $1
+    LIMIT 1;
+
+-- name: SetDeviceMode :exec
+UPDATE inverter_settings
+SET device_mode = $1
+WHERE state = $2;
+
+-- name: GetDeviceMode :one
+SELECT device_mode
+FROM inverter_settings
+WHERE state = $1
+    LIMIT 1;
+
+-- name: SetGridCharge :exec
+UPDATE inverter_settings
+SET grid_charge = $1
+WHERE state = $2;
+
+-- name: GetGridCharge :one
+SELECT grid_charge
+FROM inverter_settings
+WHERE state = $1
+    LIMIT 1;
+
+-- name: GetLoadFirstStopDischarge :one
+SELECT load_first_stop_discharge
+FROM inverter_settings
+WHERE state = $1
+    LIMIT 1;
+
+-- name: SetLoadFirstStopDischarge :exec
+UPDATE inverter_settings
+SET load_first_stop_discharge = $1
+WHERE state = $2;
