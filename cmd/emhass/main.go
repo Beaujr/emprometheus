@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,6 +20,8 @@ import (
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	p "github.com/beaujr/emprometheus/internal/prometheus"
 	"github.com/beaujr/emprometheus/internal/provider"
@@ -96,7 +99,7 @@ func main() {
 	defer tp.Shutdown(sigkillCtx)
 	client := &http.Client{
 		Transport: otelhttp.NewTransport(
-			http.DefaultTransport,
+			peerServiceTransport{next: http.DefaultTransport},
 			otelhttp.WithTracerProvider(tp),
 		),
 	}
@@ -247,4 +250,18 @@ func main() {
 			logger.Error(err.Error())
 		}
 	}
+}
+
+type peerServiceTransport struct {
+	next http.RoundTripper
+}
+
+func (t peerServiceTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if span := trace.SpanFromContext(req.Context()); span.IsRecording() {
+		if u, err := url.Parse(req.URL.String()); err == nil {
+			span.SetAttributes(attribute.String("peer.service", u.Hostname()))
+		}
+	}
+
+	return t.next.RoundTrip(req)
 }
