@@ -6,7 +6,7 @@ TYPE ?= image
 TAG ?= latest
 GOOS ?= linux
 GOARCH ?= amd64
-DB_URL ?= "postgres://postgres:postgres@192.168.1.92:5432/postgres?sslmode=disable"
+DB_URL ?= "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
 
 build:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build  \
