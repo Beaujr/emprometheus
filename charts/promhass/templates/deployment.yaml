@@ -73,6 +73,7 @@ spec:
           args:
             - --server
             - --steps={{.Values.steps}}
+            - --dsn={{ .Values.postgres }}
           {{- with .Values.promhass.args }}
             {{ toYaml . | nindent 12 }}
           {{- end }}

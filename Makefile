@@ -6,6 +6,8 @@ TYPE ?= image
 TAG ?= latest
 GOOS ?= linux
 GOARCH ?= amd64
+DOCKERFILE ?= Dockerfile
+CONTEXT ?= ""
 DB_URL ?= "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
 
 build:
@@ -34,10 +36,10 @@ docker:
     		--tag $(REGISTRY)/$(APP_NAME):$(TAG) \
     		--platform $(PLATFORM) \
     		--output "type=$(TYPE)" \
-    		--file Dockerfile \
+    		--file $(DOCKERFILE) \
     		--push \
     		--provenance false \
-    		./
+    		./$(CONTEXT)
 
 compose: releaser
 	docker compose -f docker-compose.yaml build

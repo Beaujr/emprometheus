@@ -11,6 +11,11 @@ promhass:
 # the amount of steps in a 24 hour day, 24 = 60 in emhass, 48 = 30
 steps: 48
 
+dbmate_image:
+  repository: containers.whickerx.info/emhassmigrations
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
 promhass_image:
   repository: emhass
   pullPolicy: IfNotPresent
@@ -261,3 +266,4 @@ secrets: |-
   Altitude: 0
   time_zone: Europe/London
 
+postgres: postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable
