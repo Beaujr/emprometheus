@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 	"time"
 	_ "time/tzdata"
@@ -104,7 +103,6 @@ func (o *Octopus) graphqlSavingSessions(ctx context.Context, client *http.Client
 	if err != nil {
 		return nil, err
 	}
-	o.logger.Info("savingsession", slog.String("response", string(body)))
 	var hhResp SavingSessionResponse
 	if err = json.Unmarshal(body, &hhResp); err != nil {
 		return nil, err
@@ -125,29 +123,43 @@ func (o *Octopus) fetchSavingSessions(ctx context.Context) ([]Result, error) {
 	}
 	var results []Result
 
-    uk, err := time.LoadLocation("Europe/London")
-    if err != nil {
-    	return nil, err
-    }
+	uk, err := time.LoadLocation("Europe/London")
+	if err != nil {
+		return nil, err
+	}
 
-    now := time.Now().In(uk)
-    for _, edge := range events.Data.SavingSessions.Events {
-    	if edge.EventType != "WEEKEND_HAPPY_HOUR" &&
-    		edge.EventType != "TURN_UP" {
-    		continue
-    	}
-
-    	if edge.StartAt.Before(now) {
-    		continue
-    	}
-
-    	results = append(results, Result{
-    		ValueExcVat: 0,
-    		ValueIncVat: 0, // TURN_UP is only free for above-average usage; TODO: model better
-    		ValidFrom:   edge.StartAt.Add(-time.Hour), // todo fix post dst change eom oct
-	    	ValidTo:     edge.EndAt.Add(-time.Hour),
-    	})
-    }
+	now := time.Now().In(uk)
+	for _, edge := range events.Data.SavingSessions.Account.JoinedEvents {
+		if edge.EventType != "WEEKEND_HAPPY_HOUR" &&
+			edge.EventType != "TURN_UP" {
+			continue
+		}
+		startAt, err := adjustToLocalOffset(edge.StartAt, uk)
+		if err != nil {
+			return nil, err
+		}
+		if startAt.Before(now) {
+			continue
+		}
+		endAt, err := adjustToLocalOffset(edge.EndAt, uk)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, Result{
+			ValueExcVat: 0,
+			ValueIncVat: 0,       // TURN_UP is only free for above-average usage; TODO: model better
+			ValidFrom:   startAt, // todo fix post dst change eom oct
+			ValidTo:     endAt,
+		})
+	}
 
 	return results, nil
+}
+
+func adjustToLocalOffset(t time.Time, loc *time.Location) (time.Time, error) {
+	return time.Date(
+		t.Year(), t.Month(), t.Day(),
+		t.Hour(), t.Minute(), t.Second(), t.Nanosecond(),
+		loc,
+	), nil
 }
