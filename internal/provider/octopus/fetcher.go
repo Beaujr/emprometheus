@@ -129,13 +129,9 @@ func (o *Octopus) GenerateOctopusTariff(ctx context.Context, steps int) error {
 		if err != nil {
 			return err
 		}
-		happyHoursRemoved := slices.DeleteFunc(results, func(result Result) bool {
-			for _, h := range happyHours {
-				return result.ValidFrom.Equal(h.ValidFrom)
-			}
-			return false
-		})
-		results = append(happyHoursRemoved, happyHours...)
+		for _, h := range happyHours {
+			results = InjectTariffPeriod(results, h)
+		}
 	}
 	contents := o.generateTariffContents(results, nextTariffBoundary(now, resolution), time.Hour*24, resolution)
 	body := bytes.Join(contents, nil)
@@ -294,7 +290,43 @@ func nextTariffBoundary(now time.Time, resolution time.Duration) time.Time {
 
 	return truncated
 }
+func InjectTariffPeriod(periods []Result, special Result) []Result {
+	var result []Result
 
+	for _, period := range periods {
+		if !period.ValidFrom.Before(special.ValidTo) ||
+			!period.ValidTo.After(special.ValidFrom) {
+			result = append(result, period)
+			continue
+		}
+
+		// Preserve the portion before the special period.
+		if period.ValidFrom.Before(special.ValidFrom) {
+			result = append(result, Result{
+				ValueExcVat: period.ValueExcVat,
+				ValueIncVat: period.ValueIncVat,
+				ValidFrom:   period.ValidFrom,
+				ValidTo:     special.ValidFrom,
+			})
+		}
+
+		// Preserve the portion after the special period.
+		if period.ValidTo.After(special.ValidTo) {
+			result = append(result, Result{
+				ValueExcVat: period.ValueExcVat,
+				ValueIncVat: period.ValueIncVat,
+				ValidFrom:   special.ValidTo,
+				ValidTo:     period.ValidTo,
+			})
+		}
+	}
+	result = append(result, special)
+	slices.SortFunc(result, func(a, b Result) int {
+		return a.ValidFrom.Compare(b.ValidFrom)
+	})
+
+	return result
+}
 func (o *Octopus) getKrakenClient(ctx context.Context) (*http.Client, error) {
 	mutation := `
 		mutation ObtainKrakenToken($apiKey: String!) {
