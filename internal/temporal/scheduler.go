@@ -422,6 +422,9 @@ func (fs *Temporal) output(ctx context.Context, method string) error {
 	}
 	var lastScheduledTime time.Time
 	for _, schedule := range schedules {
+		if schedule.Time().After(lastScheduledTime) {
+			lastScheduledTime = schedule.Time()
+		}
 		if err = fs.process(ctx, schedule.Time(), schedule.Workmode(), schedule.ChargeBatteryFromGrid(), schedule.Soc()); err != nil {
 			fs.logger.Warn("error", slog.String("error", err.Error()))
 		}
