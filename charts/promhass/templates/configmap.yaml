@@ -7,5 +7,5 @@ metadata:
 data:
   config.json: |-
   {{ merge .Values.config (dict "optimization_time_step"  (div 1440 .Values.steps) ) | toJson | indent 4 }}
-  secrets.yaml:
-  {{ .Values.secrets | toYaml | indent 4 }}
+  secrets.yaml: |-
+  {{ toYaml .Values.secrets | nindent 4 }}

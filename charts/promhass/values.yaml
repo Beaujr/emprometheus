@@ -255,7 +255,7 @@ config:
   battery_minimum_state_of_charge: 0.1
   battery_maximum_state_of_charge: 1
   battery_target_state_of_charge: 0.6
-secrets: |-
+secrets:
   hass_url: http://localhost:8123/
   long_lived_token: token_not_needed
   lat: 56.048
