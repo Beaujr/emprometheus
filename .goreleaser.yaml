@@ -47,6 +47,30 @@ dockers:
     build_flag_templates:
       - "--pull"
       - "--platform=linux/arm64"
+  - image_templates:
+      - "ghcr.io/beaujr/emprometheus:{{ .Version }}-arm64"
+      - "ghcr.io/beaujr/emprometheus:latest-arm64"
+    use: buildx
+    dockerfile: Dockerfile.goreleaser
+    goos: linux
+    goarch: arm64
+    ids:
+      - emhass
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/arm64"
+  - image_templates:
+      - "ghcr.io/beaujr/emprometheus:{{ .Version }}-amd64"
+      - "ghcr.io/beaujr/emprometheus:latest-amd64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    goos: linux
+    goarch: amd64
+    ids:
+      - emhass
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/amd64"
 docker_manifests:
   - name_template: "containers.whickerx.info/emhass:latest"
     image_templates:
@@ -58,8 +82,12 @@ docker_manifests:
       - "containers.whickerx.info/emhass:latest-arm64"
   - name_template: "ghcr.io/beaujr/emprometheus:{{ .ShortCommit }}"
     image_templates:
-      - "containers.whickerx.info/emhass:latest-amd64"
-      - "containers.whickerx.info/emhass:latest-arm64"
+      - "ghcr.io/beaujr/emprometheus:latest-amd64"
+      - "ghcr.io/beaujr/emprometheus:latest-arm64"
+  - name_template: "ghcr.io/beaujr/emprometheus:latest"
+    image_templates:
+      - "ghcr.io/beaujr/emprometheus:latest-amd64"
+      - "ghcr.io/beaujr/emprometheus:latest-arm64"
 checksum:
   name_template: "checksums.txt"
 
