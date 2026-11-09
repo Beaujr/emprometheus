@@ -47,6 +47,7 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASSWORD }}
       - uses: docker/login-action@v3
+        name: GHCR Login
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -74,4 +75,4 @@ jobs:
           KUBECONF: ${{ secrets.KUBECONF }}
         run: mkdir -p ~/.kube/ && echo $KUBECONF  | base64 -d > ~/.kube/config
       - name: Deploy
-        run: helm upgrade --install promhass charts/promhass --set promhass_image.tag=$(git rev-parse --short HEAD) -f charts/values/cloud.yaml
+        run: helm upgrade --install promhass charts/promhass --set promhass_image.repository=ghcr.io/beaujr/emprometheus --set promhass_image.tag=$(git rev-parse --short HEAD) -f charts/values/cloud.yaml
