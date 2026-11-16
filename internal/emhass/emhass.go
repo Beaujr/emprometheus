@@ -40,6 +40,8 @@ func (e *Emhass) Forecast(ctx context.Context, forecastMethod, body string) erro
 	if err != nil {
 		return err
 	}
+
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.Do(req)
 	if err != nil {
 		return err
