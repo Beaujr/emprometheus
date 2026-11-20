@@ -42,19 +42,21 @@ spec:
           env:
             - name: SECRETS_PATH
               value: /secrets_emhass.yaml
+            - name: EMHASS_API_AUTH_DISABLED
+              value: "true"
           ports:
             - name: emhasshttp
               containerPort: {{ .Values.emhass_service.port }}
               protocol: TCP
           startupProbe:
             httpGet:
-              path: /
+              path: /healthz
               port: {{ .Values.emhass_service.port }}
             failureThreshold: {{ .Values.emhass_startupProbe.failureThreshold }}
             periodSeconds: {{ .Values.emhass_startupProbe.periodSeconds }}
           livenessProbe:
             httpGet:
-              path: /
+              path: /healthz
               port: {{ .Values.emhass_service.port }}
             initialDelaySeconds: 10
             periodSeconds: 30
