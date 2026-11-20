@@ -13,8 +13,8 @@ services:
     restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:5000/healthz || exit 1" ]
-      interval: 10s
-      timeout: 10s
+      interval: 20s
+      timeout: 20s
       retries: 3
       start_period: 60s
     networks:
