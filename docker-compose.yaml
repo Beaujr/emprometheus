@@ -10,9 +10,10 @@ services:
       - /etc/localtime:/etc/localtime:ro
     environment:
       - "LOCAL_COST_FUN=profit" # Maximizes profit (exports - imports)
+      - "EMHASS_API_AUTH_DISABLED=true"
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:5000/ || exit 1" ]
+      test: [ "CMD-SHELL", "curl -f http://localhost:5000/healthz || exit 1" ]
       interval: 10s
       timeout: 10s
       retries: 3
