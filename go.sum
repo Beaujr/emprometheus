@@ -61,8 +61,8 @@ github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f h1:KUppIJq7/+
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/nexus-rpc/nexus-proto-annotations v0.1.0 h1:2fELd+9sqUtNu6Fg//pw8YFsxOvp8vZ8hfP0nHhNI80=
 github.com/nexus-rpc/nexus-proto-annotations v0.1.0/go.mod h1:n3UjF1bPCW8llR8tHvbxJ+27yPWrhpo8w/Yg1IOuY0Y=
-github.com/nexus-rpc/sdk-go v0.7.0 h1:38NrfY5rLnZAiMMs2ZfCKI/CSDzdfJG+27iAgfA8bUI=
-github.com/nexus-rpc/sdk-go v0.7.0/go.mod h1:FHdPfVQwRuJFZFTF0Y2GOAxCrbIBNrcPna9slkGKPYk=
+github.com/nexus-rpc/sdk-go v0.8.0 h1:xQbsF3KHlCwbIt7fMkAk6gx2iE/NYsg9pHRTZgq95VQ=
+github.com/nexus-rpc/sdk-go v0.8.0/go.mod h1:FHdPfVQwRuJFZFTF0Y2GOAxCrbIBNrcPna9slkGKPYk=
 github.com/pandatix/go-abnf v0.5.5 h1:EXex5KkRQx4Dm6GnpAcQnIMBs9KiK0uf8p/wq+4t9PM=
 github.com/pandatix/go-abnf v0.5.5/go.mod h1:AE0KD3/VNoCjGzc1gqetRKshbI4SYErXQ/8kPenR5mc=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
@@ -117,8 +117,8 @@ go.opentelemetry.io/proto/otlp v1.11.0 h1:5rrYs0Ykyj50sdU/JU0x8etU+LubXWb+gED6Tb
 go.opentelemetry.io/proto/otlp v1.11.0/go.mod h1:SmVizdCOAm3XBtG1g1NnOdhW6jtddT72hLMhv8VwA8E=
 go.temporal.io/api v1.64.3 h1:Q2oP9jVB5pSputb2j3BLAEjJsi8A2tSzMojqcSGyga0=
 go.temporal.io/api v1.64.3/go.mod h1:acM0I9WPuYg8W3Pd9jOZvEgi7mRUttUQ4+e7fowKVnM=
-go.temporal.io/sdk v1.51.0 h1:RsEghFfg91qWgNaecRgPrms9TA7iXskSzSQO2BwhJRs=
-go.temporal.io/sdk v1.51.0/go.mod h1:Gj2KwnQAlMhPRSX1RoqV3Zez8Y0U+6dCGxn1sg+j9kg=
+go.temporal.io/sdk v1.52.0 h1:JHkgwaVqDQ07nAQ+lIrwXEnTfcr83hFiJQTJ8av/AzY=
+go.temporal.io/sdk v1.52.0/go.mod h1:7Y12GFTIhBPoejTbjudl2+SLKFn8fXcP0dKGwVqmS14=
 go.temporal.io/sdk/contrib/opentelemetry v0.9.0 h1:GDPLQrU/QJCnIzhSX6f3KCA8aoeEQpH214Cl30ZMVSo=
 go.temporal.io/sdk/contrib/opentelemetry v0.9.0/go.mod h1:feY89HhlQmfpl4pGapBy8bW+bgPlDgyQphYkAV1FRJc=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
