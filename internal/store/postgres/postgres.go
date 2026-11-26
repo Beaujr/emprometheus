@@ -15,10 +15,17 @@ func New(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 	attrs := append(otelsql.AttributesFromDSN(dsn), semconv.DBSystemPostgreSQL)
-
-	db, err := otelsql.Open("postgres", dsn, otelsql.WithAttributes(
-		attrs...,
-	), otelsql.WithMeterProvider(prometheus.GetMeterProvider()), otelsql.WithTracerProvider(telemetry.GetTraceProvider()), otelsql.WithSQLCommenter(true))
+	opts := []otelsql.Option{
+		otelsql.WithSQLCommenter(true),
+		otelsql.WithMeterProvider(prometheus.GetMeterProvider()),
+		otelsql.WithAttributes(
+			attrs...,
+		),
+	}
+	if tp := telemetry.GetTraceProvider(); tp != nil {
+		opts = append(opts, otelsql.WithTracerProvider(tp))
+	}
+	db, err := otelsql.Open("postgres", dsn, opts...)
 	if err != nil {
 		return nil, err
 	}
