@@ -12,7 +12,7 @@ services:
       - "EMHASS_API_AUTH_DISABLED=true"
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://127.0.0.1:5000/healthz || exit 1" ]
+      test: [ "CMD-SHELL", "curl -s http://127.0.0.1:5000/healthz | grep -q '\"versions\"' || exit 1" ] # health check returns 503 if no forecast done, so just grep output contains something
       interval: 10s
       timeout: 20s
       retries: 3
