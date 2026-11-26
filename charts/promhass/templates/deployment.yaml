@@ -50,13 +50,13 @@ spec:
               protocol: TCP
           startupProbe:
             httpGet:
-              path: /healthz
+              path: /
               port: {{ .Values.emhass_service.port }}
             failureThreshold: {{ .Values.emhass_startupProbe.failureThreshold }}
             periodSeconds: {{ .Values.emhass_startupProbe.periodSeconds }}
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /
               port: {{ .Values.emhass_service.port }}
             initialDelaySeconds: 10
             periodSeconds: 30
